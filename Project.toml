@@ -1,0 +1,28 @@
+name = "SolarRadiation"
+uuid = "d01e3663-6acb-4162-92ee-c50acb918cac"
+authors = ["Michael Kearney <m.kearney@unimelb.edu.au>", "rafaelschouten@gmail.com"]
+version = "0.1.0"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+ModelParameters = "4744a3fa-6c31-4707-899e-a3298e4618ad"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[compat]
+Aqua = "0.8.14"
+Dates = "1.11.0"
+ModelParameters = "0.4.5"
+SpecialFunctions = "2.6.1"
+StaticArrays = "1.9.15"
+Test = "1.11.0"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["CSV", "DataFrames"]
