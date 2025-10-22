@@ -1,4 +1,4 @@
-using Aqua, DataFrames, CSV, Test, SafeTestsets, Unitful
+using Aqua, SolarRadiation, DataFrames, CSV, Test, SafeTestsets, Unitful
 
 @testset "Aqua.jl quality assurance" begin
     Aqua.test_all(SolarRadiation)
