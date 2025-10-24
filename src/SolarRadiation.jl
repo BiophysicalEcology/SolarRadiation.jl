@@ -7,7 +7,7 @@ using SpecialFunctions, StaticArrays, Dates
 export scattered_uv
 export elevation_correction
 export solar_geometry, hour_angle
-export solar_radiation, SolarProblem, Terrain
+export solar_radiation, SolarProblem, SolarTerrain
 
 include("constants.jl")
 include("elevation_correction.jl")
