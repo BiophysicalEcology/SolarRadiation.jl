@@ -223,9 +223,9 @@ function solar_radiation(solar_model::SolarProblem;
                         SRλ[N] = 0.0u"mW / cm^2 / nm"
                     elseif iuv
                         if τλ1 >= 0.03
-                            GAMR, GAML, SBAR = scattered_uv!(gamma_buffers, τλ1)
+                            gamma_right, gamma_left, s_bar = scattered_uv!(gamma_buffers, τλ1)
                             SRλ[N] = (
-                                         ((float(GAML[intcz]) + float(GAMR[intcz])) / (2.0 * (1.0 - alb * float(SBAR))))
+                                         ((float(gamma_left[intcz]) + float(gamma_right[intcz])) / (2.0 * (1.0 - alb * float(s_bar))))
                                          -
                                          exp(-float(τλ1) * airms)
                                      ) * cz * Sλ[N] * AR2 / 1000.0
