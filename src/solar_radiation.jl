@@ -6,12 +6,12 @@ function solar_radiation(solar_model::SolarProblem;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=2001, # TODO: this shouldn't have a default
     latitude::Number,
-    terrain::SolarTerrain,
+    solar_terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
 )
     (; solar_geometry_model, cmH2O, iuv, scattered, amr, nmax, Iλ, OZ, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
-    (; elevation, horizon_angles, slope, aspect, P_atmos, albedo) = terrain
+    (; elevation, horizon_angles, slope, aspect, P_atmos, albedo) = solar_terrain
 
     ndays = length(days)    # number of days
     ntimes = length(hours)  # number of times

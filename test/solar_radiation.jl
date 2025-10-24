@@ -31,7 +31,7 @@ days = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]*1.0
 
 solar_model = SolarProblem(; iuv = Bool(Int(solarinput[:IUV])))
 
-terrain = SolarTerrain(;
+solar_terrain = SolarTerrain(;
     slope = (solarinput[:slope])*1.0u"°",
     aspect = (solarinput[:aspect])*1.0u"°",
     elevation = (solarinput[:elev])*1.0u"m",
@@ -44,7 +44,7 @@ terrain = SolarTerrain(;
     days,               # days of year
     hours,              # hours of day
     latitude,           # latitude (degrees)
-    terrain,
+    solar_terrain,
 );
 
 zenith_angle = solar_radiation_out.zenith_angle
