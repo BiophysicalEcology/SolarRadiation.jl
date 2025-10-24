@@ -31,7 +31,7 @@ days = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]*1.0
 
 solar_model = SolarProblem(; iuv = Bool(Int(solarinput[:IUV])))
 
-terrain = Terrain(;
+terrain = SolarTerrain(;
     slope = (solarinput[:slope])*1.0u"°",
     aspect = (solarinput[:aspect])*1.0u"°",
     elevation = (solarinput[:elev])*1.0u"m",

@@ -1,6 +1,6 @@
 abstract type AbstractTerrain end
 
-@kwdef struct Terrain <: AbstractTerrain
+@kwdef struct SolarTerrain <: AbstractTerrain
     elevation
     horizon_angles
     slope

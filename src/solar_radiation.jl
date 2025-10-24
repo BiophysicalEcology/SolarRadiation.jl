@@ -6,7 +6,7 @@ function solar_radiation(solar_model::SolarProblem;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=2001, # TODO: this shouldn't have a default
     latitude::Number,
-    terrain::Terrain,
+    terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
 )
