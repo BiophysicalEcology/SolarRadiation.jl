@@ -21,7 +21,7 @@ const NC1 = reshape(Int[
     ], 4, 8)
 
 # constants for the solar_radiation function
-const DEFAULT_Iλ = Float64.([ # wavelengths across which to integrate
+const DEFAULT_λ = Float64.([ # wavelengths across which to integrate
         290, 295, 300, 305, 310, 315, 320, 330, 340, 350, 360, 370, 380, 390,
         400, 420, 440, 460, 480, 500, 520, 540, 560, 580, 600, 620, 640, 660, 680, 700,
         720, 740, 760, 780, 800, 820, 840, 860, 880, 900, 920, 940, 960, 980, 1000, 1020,
