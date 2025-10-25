@@ -32,7 +32,7 @@ const DEFAULT_λ = Float64.([ # wavelengths across which to integrate
         2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000
     ]) .* u"nm"
 
-const DEFAULT_OZ = reshape([ # seasonal variation of atmospheric ozone in cm, Robinson 1966 Table 4.2
+const DEFAULT_ozone_column = reshape([ # seasonal variation of atmospheric ozone in cm, Robinson 1966 Table 4.2
             0.31, 0.31, 0.32, 0.32, 0.31, 0.3, 0.27, 0.24, 0.23, 0.22, 0.23, 0.24,
             0.27, 0.3, 0.32, 0.33, 0.34, 0.34, 0.33, 0.3, 0.31, 0.31, 0.31, 0.3, 0.29, 0.28,
             0.25, 0.24, 0.22, 0.24, 0.26, 0.28, 0.32, 0.36, 0.39, 0.4, 0.4, 0.39, 0.3, 0.31,

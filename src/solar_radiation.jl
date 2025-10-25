@@ -10,7 +10,7 @@ function solar_radiation(solar_model::SolarProblem;
     longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
 )
-    (; solar_geometry_model, cmH2O, iuv, scattered, MR₀, nmax, iλ, OZ, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
+    (; solar_geometry_model, cmH2O, scattered_uv, scattered, MR₀, nmax, λ, ozone_column, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
     (; elevation, horizon_angles, slope, aspect, P_atmos, albedo) = solar_terrain
     ϕ = latitude
     ndays = length(days)    # number of days
@@ -59,9 +59,9 @@ function solar_radiation(solar_model::SolarProblem;
             (; ζ, δ, z, ar²) = solar_geometry(solar_geometry_model, ϕ; d, h) # compute ecliptic, declination, zenith angle and (a/r)^2
             Z = uconvert(u"°", z)
             Zsl = Z
-            amult = 1.0
+            azimuth_multiplier = 1.0
             if sign(ϕ) < 0
-                amult = -1.0
+                azimuth_multiplier = -1.0
             end
             if Z < 107.0u"°"
                 if Z > 88.0u"°"
@@ -104,7 +104,7 @@ function solar_radiation(solar_model::SolarProblem;
                 # tan_azimuth corresponds to tangent of azimuth
                 tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
                 # sun azimuth in radians
-                solar_azimuth = atan(tan_azimuth) * amult
+                solar_azimuth = atan(tan_azimuth) * azimuth_multiplier
                 # azimuth in degrees
                 solar_azimuth_deg = uconvert(u"°", solar_azimuth) # TODO is this needed?
                 # correcting for hemisphere/quadrant
@@ -179,8 +179,8 @@ function solar_radiation(solar_model::SolarProblem;
                 end
                 # clamp llat index to valid range
                 mon = month(Date(year, 1, 1) + Day(d - 1)) # month from day of year
-                llat = clamp(llat, 1, size(OZ, 1))
-                ozone_depth = OZ[llat, mon]  # ozone thickness (cm) from lookup table
+                llat = clamp(llat, 1, size(ozone_column, 1))
+                ozone_depth = ozone_column[llat, mon]  # ozone thickness (cm) from lookup table
 
                 (; molecular, aerosol, ozone, water) = elevation_correction(elevation)
                 A1 = molecular
@@ -190,9 +190,9 @@ function solar_radiation(solar_model::SolarProblem;
                 P = P_atmos
 
                 for n in 1:nmax
-                    λτR = (P / 101300u"Pa") * τR[n] * A1
-                    λτA = (25.0u"km" / MR₀) * τA[n] * A2
-                    λτO = (ozone_depth / 0.34) * τO[n] * A3
+                    λτR = (P / 101300u"Pa") * τR[n] * A1 # TODO 101300u"Pa" add as constant
+                    λτA = (25.0u"km" / MR₀) * τA[n] * A2 # TODO add 25.0u"km" as constant
+                    λτO = (ozone_depth / 0.34) * τO[n] * A3 # TODO add 0.34 as constant with units
                     λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A4) # eq. 13 McCullough & Porter
                     λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW # eq. 14 McCullough & Porter
 
@@ -224,7 +224,7 @@ function solar_radiation(solar_model::SolarProblem;
                     # Sky (Dλ) and Global Radiation (Gλ)
                     if scattered == false
                         Dλ[n] = 0.0u"mW / cm^2 / nm"
-                    elseif iuv
+                    elseif scattered_uv
                         if λτR >= 0.03
                             γᵣ, γₗ, s̄ = scattered_radiation!(gamma_buffers, λτR)
                             I₀_λ = cz * Sλ[n] * ar² / 1000.0 # TODO fix units
@@ -241,15 +241,14 @@ function solar_radiation(solar_model::SolarProblem;
                         if n > 11
                             Dλ[n] = 0.0u"mW / cm^2 / nm"
                         else
-                            # The option iuv = false has caused the program to enter this section which
+                            # The option scattered_uv = false has caused the program to enter this section which
                             # computes scattered radiation (Dλ) for 290 nm to 360 nm using a theory
                             # of radiation scattered from a Rayleigh (molecular) atmosphere with
                             # ozone absorption. The functions needed for the computation are stored
                             # as FD(n,k) and FDQ(n,k) where n is the wavelength index and k is
                             # (zenith angle + 5)/5 rounded off to the nearest integer value.
                             # The arrays FD and FDQ are for sea level (P = 1013 mb).
-                            # TODO: ustrip to what
-                            B = ustrip(Z) / 5
+                            B = ustrip(u"°", Z) / 5
                             IA = trunc(Int, B)
                             C = B - IA
                             if C > 0.5
@@ -257,9 +256,10 @@ function solar_radiation(solar_model::SolarProblem;
                             else
                                 k = IA + 1
                             end
-                            FDAV = FD[n, k]
-                            FDQDAV = FDQ[n, k]
-                            Dλ[n] = (Sλ[n] / π) * (FDAV + FDQDAV * (A / (1.0 - (A * s̄[n])))) / 1000.0
+                            flux_down = FD[n, k]
+                            flux_down_div_Q = FDQ[n, k]
+                            Q = (A / (1.0 - (A * s̄[n]))) # eq. 31 in Dave & Furukawa 1966
+                            Dλ[n] = (Sλ[n] / π) * (flux_down + flux_down_div_Q * Q) / 1000.0
                             Dλ[n] *= ar²
                         end
                     end
@@ -272,8 +272,8 @@ function solar_radiation(solar_model::SolarProblem;
                         ∫I[1] = 0.0u"mW / cm^2"
                         ∫G[1] = 0.0u"mW / cm^2"
                     else
-                        Aλ[n] = iλ[n]
-                        Aλ[n-1] = iλ[n-1]
+                        Aλ[n] = λ[n]
+                        Aλ[n-1] = λ[n-1]
 
                         Δλ = Aλ[n] - Aλ[n-1]
 
@@ -320,7 +320,7 @@ function solar_radiation(solar_model::SolarProblem;
         direct_total = I .* (10u"W/m^2" / 1u"mW/cm^2"),
         diffuse_total = D .* (10u"W/m^2" / 1u"mW/cm^2"),
         global_total = G .* (10u"W/m^2" / 1u"mW/cm^2"),
-        wavelength = iλ,
+        wavelength = λ,
         rayleigh_spectra = λIᵣ .* (10u"W/m^2" / 1u"mW/cm^2"),
         direct_spectra = λI .* (10u"W/m^2" / 1u"mW/cm^2"),
         diffuse_spectra = λD .* (10u"W/m^2" / 1u"mW/cm^2"),
