@@ -31,7 +31,7 @@ Computes key solar geometry parameters based on McCullough & Porter (1971):
 - `ζ`: Auxiliary solar longitude (radians)
 - `δ`: Solar declination (radians)
 - `z`: Solar zenith angle (radians)
-- `AR2`: Square of Earth-to-Sun radius factor (unitless)
+- `ar²`: Square of Earth-to-Sun radius factor (unitless)
 
 # Arguments
 - `d`: Day of year (1–365)
@@ -44,7 +44,7 @@ Computes key solar geometry parameters based on McCullough & Porter (1971):
 - `se`: Constant for solar declination amplitude (default: `0.39779`)
 
 # Returns
-Tuple: `(ζ, δ, z, AR2)` with angle quantities in radians and AR2 unitless.
+Tuple: `(ζ, δ, z, ar²)` with angle quantities in radians and ar² unitless.
 
 # Reference
 McCullough & Porter (1971)
@@ -68,8 +68,8 @@ function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity; #
     cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ)         # Eq.3
     cosZ = clamp(cosZ, -1.0, 1.0)  # prevent NaN due to rounding
     z = acos(cosZ)u"rad"                                          # Zenith angle
-    AR2 = 1.0 + (2.0ϵ) * cos(ω * d)                                   # Eq.2
+    ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                   # Eq.2
     δ = δ * u"rad"
     ζ = ζ * u"rad"
-    return(; ζ, δ, z, AR2)
+    return(; ζ, δ, z, ar²)
 end
