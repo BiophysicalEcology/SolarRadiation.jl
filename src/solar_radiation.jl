@@ -180,7 +180,7 @@ function solar_radiation(solar_model::SolarProblem;
                 # clamp llat index to valid range
                 mon = month(Date(year, 1, 1) + Day(d - 1)) # month from day of year
                 llat = clamp(llat, 1, size(OZ, 1))
-                ozone = OZ[llat, mon]  # ozone thickness (cm) from lookup table
+                ozone_depth = OZ[llat, mon]  # ozone thickness (cm) from lookup table
 
                 (; molecular, aerosol, ozone, water) = elevation_correction(elevation)
                 A1 = molecular
@@ -192,7 +192,7 @@ function solar_radiation(solar_model::SolarProblem;
                 for n in 1:nmax
                     λτR = (P / 101300u"Pa") * τR[n] * A1
                     λτA = (25.0u"km" / MR₀) * τA[n] * A2
-                    λτO = (ozone / 0.34) * τO[n] * A3
+                    λτO = (ozone_depth / 0.34) * τO[n] * A3
                     λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A4) # eq. 13 McCullough & Porter
                     λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW # eq. 14 McCullough & Porter
 
