@@ -4,7 +4,7 @@ function solar_radiation(model::SolarProblem, args...; kwargs...)
 end
 function solar_radiation(solar_model::SolarProblem;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
-    year::Real=2001, # TODO: this shouldn't have a default
+    year::Real=1975, # to deal with leap years in obtaining month from day of year, default to non leap year
     latitude::Number,
     solar_terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
@@ -34,12 +34,10 @@ function solar_radiation(solar_model::SolarProblem;
     AZIs = Vector{Union{Missing,typeof(0.0u"°")}}(undef, nsteps)
     fill!(AZIs, 90.0u"°")   
     HHs = fill(0.0, ndays)                      # hour angles
-    tsns = fill(0.0, ndays)                     # hour at solar noon
     DOYs = Vector{Int}(undef, nsteps)           # day of year
     times = Vector{Real}(undef, nsteps)         # time
     step = 1
     HH = 0.0 # initialise sunrise hour angle
-    tsn = 12.0 # initialise time of solar noon
     for i in 1:ndays
         # arrays to hold radiation for a given hour between 300 and 320 nm in 2 nm steps
         GRINT = fill(0.0u"mW/cm^2", nmax)   # integrated global radiation component (direct + scattered)
@@ -59,33 +57,28 @@ function solar_radiation(solar_model::SolarProblem;
             (; ζ, δ, z, AR2) = solar_geometry(solar_geometry_model, latitude; d, h) # compute ecliptic, declination, zenith angle and (a/r)^2
             Z = uconvert(u"°", z)
             Zsl = Z
-            amult = 1.0
-            if sign(latitude) < 0
-                amult = -1.0
+
+            # Compute twilight skylight irradiance (Rozenberg 1966; Diem 1966) # TODO add refs to doc, Rozenberg = Twilight. Plenum Press.
+            if 88u"°" < Z < 107u"°"
+                # Log10 of illuminance (lux) as a linear function of solar zenith angle
+                log_illuminance = 41.34615384 - 0.423076923 * ustrip(u"°", Z) # p. 18,19 Rozenberg 1966
+                
+                # Convert lux → W/m² (via 1.46×10⁻³ kW/lumen)
+                # p. 239 Documenta Geigy Scientific Tables. 1966. 6th ed. K. Diem, ed.
+                skylight = (10.0^log_illuminance) * 1.46e-3u"mW/cm^2"
+
+                # Assign twilight irradiance values
+                SRINT[nmax] = skylight
+                GRINT[nmax] = skylight
+                GRs[step] = skylight
+                SRs[step] = skylight
             end
-            if Z < 107.0u"°"
-                if Z > 88.0u"°"
-                    # Compute skylight based on G.V. Rozenberg. 1966. Twilight. Plenum Press.
-                    # p. 18,19.  First computing lumens: y = b - mx. Regression of data is:
-                    Elog = 41.34615384 - 0.423076923 * ustrip(u"°", Z)
-                    # Converting lux (lumen/m2) to W/m2 on horizontal surface -
-                    # Twilight - scattered skylight before sunrise or after sunset
-                    # From p. 239 Documenta Geigy Scientific Tables. 1966. 6th ed. K. Diem, ed.
-                    # Mech./elect equiv. of light = 1.46*10^-3 kW/lumen
-                    Skylum = (10.0^Elog) * 1.46E-03u"mW * cm^-2"
-                    SRINT[nmax] = Skylum
-                    GRINT[nmax] = SRINT[nmax]
-                    GRs[step] = GRINT[nmax]
-                    SRs[step] = SRINT[nmax]
-                end
-            end
+
             # testing cos(h) to see if it exceeds +1 or -1
             TDTL = -tan(δ) * tan(latitude) # from eq.7 McCullough & Porter 1971
-            if abs(TDTL) >= 1 # long day or night
-                H = π
-            else
-                H = abs(acos(TDTL))
-            end
+            # Hour angle at sunrise/sunset (radians)
+            # For polar day/night (|TDTL| ≥ 1), clamp to π
+            H = abs(TDTL) >= 1 ? π : abs(acos(TDTL))
             # check if sunrise
             HH = 12.0 * H / π
             ts = t - tsn
@@ -104,32 +97,16 @@ function solar_radiation(solar_model::SolarProblem;
                 # tazsun corresponds to tangent of azimuth
                 tazsun = sin(h) / (cos(latitude) * tan(δ) - sin(latitude) * cos(h))
                 # sun azimuth in radians
-                azsun = atan(tazsun) * amult
+                azsun = atan(tazsun) * sign(latitude)
                 # azimuth in degrees
                 dazsun = uconvert(u"°", azsun)
                 # correcting for hemisphere/quadrant
-                if h <= 0.0
-                    # Morning - east of reference
-                    if dazsun <= 0.0u"°"
-                        # 1st Quadrant (0–90°)
-                        dazsun = -1.0 * dazsun
-                    else
-                        # 2nd Quadrant (90–180°)
-                        dazsun = 180.0u"°" - dazsun
-                    end
-                else
-                    # Afternoon - west of reference
-                    if dazsun < 0.0u"°"
-                        # 3rd Quadrant (180–270°)
-                        dazsun = 180.0u"°" - dazsun
-                    else
-                        # 4th Quadrant (270–360°)
-                        dazsun = 360.0u"°" - dazsun
-                    end
-                end
-                # Special case: hour angle = 0
-                if h == 0.0
-                    dazsun = 180.0u"°"
+                dazsun = if h == 0.0 # Special case: hour angle = 0
+                    180u"°"
+                elseif h <= 0.0      # Morning - east of reference
+                    dazsun <= 0u"°" ? -dazsun : 180u"°" - dazsun
+                else                 # Afternoon - west of reference
+                    dazsun < 0u"°" ? 180u"°" - dazsun : 360u"°" - dazsun
                 end
 
                 cz = cos(z)
@@ -141,27 +118,20 @@ function solar_radiation(solar_model::SolarProblem;
                 ahoriz = horizon_angles[argmin(abs.(dazsun .- azi))]
 
                 # slope zenith angle calculation (Eq. 3.15 in Sellers 1965. Physical Climatology. U. Chicago Press)
-                if slope > 0u"°"
-                    czsl = cos(z) * cos(slope) + sin(z) * sin(slope) * cos(dazsun - aspect)
-                    zsl = acos(czsl)
-                    Zsl = min(uconvert(u"°", zsl), 90u"°") # cap at 90 degrees if sun is below slope horizon
-                    intczsl = floor(Int, 100.0 * czsl + 1.0)
-                else
-                    czsl = cz
-                    zsl = z
-                    Zsl = Z
-                    intczsl = intcz
-                end
+                czsl = ifelse(slope > 0u"°",
+                    cos(z) * cos(slope) + sin(z) * sin(slope) * cos(dazsun - aspect),
+                    cz,
+                )
+                zsl = ifelse(slope > 0u"°", acos(czsl), z)
+                Zsl = uconvert(u"°", clamp(zsl, 0u"°", 90u"°"))
+                #intczsl = ifelse(slope > 0u"°", floor(Int, 100czsl + 1), intcz)
 
                 # refraction correction check
-                if z < 1.5358896
-                    # skip refraction correction
-                else
-                    refr = 16.0 + ((z - 1.53589) * 15) / (π / 90)
-                    refr = (refr / 60) * (π / 180)
-                    z -= refr
-                end
-
+                z = ifelse(
+                    z < 1.5358896, 
+                    z,
+                    z - ((16.0 + ((z - 1.53589) * 15) / (π / 90)) / 60) * (π / 180)
+                )
                 # optical air mass (Rozenberg 1966 formula p.159 in book 'Twilight') ---
                 airms = 1.0 / (cos(z) + (0.025 * exp(-11.0 * cos(z))))
                 cz = cos(z)
@@ -170,13 +140,7 @@ function solar_radiation(solar_model::SolarProblem;
 
                 # atmospheric ozone lookup
                 # convert latitude in degrees to nearest 10-degree index
-                tlat = (latitude + 100.0u"°") / 10.0u"°"
-                llat = floor(Int, tlat)
-                allat = llat
-                ala = allat + 0.5
-                if tlat > ala
-                    llat += 1
-                end
+                llat = round(Int, (latitude + 100u"°") / 10u"°")
                 # clamp llat index to valid range
                 mon = month(Date(year, 1, 1) + Day(d - 1)) # month from day of year
                 llat = clamp(llat, 1, size(OZ, 1))
@@ -244,14 +208,8 @@ function solar_radiation(solar_model::SolarProblem;
                             # (zenith angle + 5)/5 rounded off to the nearest integer value.
                             # The arrays FD and FDQ are for sea level (P = 1013 mb).
                             # TODO: ustrip to what
-                            B = ustrip(Z) / 5
-                            IA = trunc(Int, B)
-                            C = B - IA
-                            if C > 0.5
-                                I = IA + 2
-                            else
-                                I = IA + 1
-                            end
+                            B = ustrip(u"°", Z) / 5
+                            I = trunc(Int, B) + 1 + (B % 1 > 0.5)
                             FDAV = FD[N, I]
                             FDQDAV = FDQ[N, I]
                             SRλ[N] = (Sλ[N] / π) * (FDAV + FDQDAV * (alb / (1.0 - (alb * s̄[N])))) / 1000.0
@@ -298,7 +256,6 @@ function solar_radiation(solar_model::SolarProblem;
             step += 1
         end
         HHs[i] = HH     # save today's sunrise hour angle
-        tsns[i] = tsn   # save today's time of sunrise
     end
 
     return (
@@ -306,7 +263,6 @@ function solar_radiation(solar_model::SolarProblem;
         zenith_slope_angle = ZSLs,
         azimuth_angle = AZIs,
         hour_angle_sunrise = HHs,
-        hour_solar_noon = tsns,
         day_of_year = DOYs,
         hour = times,
         # TODO remove all this allocation from broadcasts
