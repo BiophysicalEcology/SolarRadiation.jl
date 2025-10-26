@@ -33,11 +33,13 @@ function solar_radiation(solar_model::SolarProblem;
     zenith_slope_angle = fill(90.0u"°", nsteps) # slope zenith angles
     azimuth_angle = Vector{Union{Missing,typeof(0.0u"°")}}(undef, nsteps)
     fill!(azimuth_angle, 90.0u"°")   
-    hour_angle_sunrise = fill(0.0, ndays)       # hour angles
+    hour_angle_sunrise = fill(0.0, ndays)       # sunrise hour angles for interpolation
+    hour_solar_noon = fill(0.0, ndays)          # solar noon hours for interpolation
     day_of_year = Vector{Int}(undef, nsteps)    # day of year
     hour = Vector{Real}(undef, nsteps)          # time
     step = 1
     H₋ = 0.0 # initialise sunrise hour angle
+    tsn = 0.0 # initialise time solar noon
     for i in 1:ndays
         # arrays to hold radiation for a given hour between 300 and 320 nm in 2 nm steps
         ∫G = fill(0.0u"mW/cm^2", nmax)   # integrated global radiation component (direct + scattered)
@@ -78,14 +80,11 @@ function solar_radiation(solar_model::SolarProblem;
             tanδ_tanϕ = -tan(δ) * tan(ϕ) # from eq.7 McCullough & Porter 1971
             # Hour angle at sunrise/sunset (radians)
             # For polar day/night (|TDTL| ≥ 1), clamp to π
-            H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
-
+            H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ)) # hour angle at sunset
             # check if sunrise
             H₋ = 12.0 * H₊ / π # hour angle at sunrise
             ts = t - tsn
-
             sun_up = true
-
             if ts <= 0.0 && abs(ts) > H₋
                 sun_up = false
             elseif ts > 0.0 && ts >= H₋
@@ -284,6 +283,8 @@ function solar_radiation(solar_model::SolarProblem;
             hour[step] = t
             step += 1
         end
+        hour_angle_sunrise[i] = H₋     # save today's sunrise hour angle
+        hour_solar_noon[i] = tsn       # save today's time of solar noon
     end
 
     return (
@@ -291,6 +292,7 @@ function solar_radiation(solar_model::SolarProblem;
         zenith_slope_angle,
         azimuth_angle,
         hour_angle_sunrise,
+        hour_solar_noon,
         day_of_year,
         hour,
         # TODO remove all this allocation from broadcasts
