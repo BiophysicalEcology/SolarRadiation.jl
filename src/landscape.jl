@@ -44,7 +44,7 @@ abstract type AbstractTerrain end
     nmax = 111 # Maximum number of wavelength intervals
     # TODO better field names
     λ = DEFAULT_λ # Vector of wavelength bins (e.g. in `nm`)
-    ozone_column = DEFAULT_ozone_column # ozone column depth table indexed by latitude band and month (size 19×12)
+    ozone_column = DEFAULT_OZONE_COLUMN # ozone column depth table indexed by latitude band and month (size 19×12)
     τR = DEFAULT_τR # vector of optical depths per wavelength for Rayleigh scattering
     τO = DEFAULT_τO # vector of optical depths per wavelength for ozone
     τA = DEFAULT_τA # vector of optical depths per wavelength for aerosols
