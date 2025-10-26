@@ -118,20 +118,27 @@ function solar_radiation(solar_model::SolarProblem;
                 ahoriz = horizon_angles[argmin(abs.(dazsun .- azi))]
 
                 # slope zenith angle calculation (Eq. 3.15 in Sellers 1965. Physical Climatology. U. Chicago Press)
-                czsl = ifelse(slope > 0u"°",
-                    cos(z) * cos(slope) + sin(z) * sin(slope) * cos(dazsun - aspect),
-                    cz,
-                )
-                zsl = ifelse(slope > 0u"°", acos(czsl), z)
-                Zsl = uconvert(u"°", clamp(zsl, 0u"°", 90u"°"))
-                #intczsl = ifelse(slope > 0u"°", floor(Int, 100czsl + 1), intcz)
+                if slope > 0u"°"
+                    czsl = cos(z) * cos(slope) + sin(z) * sin(slope) * cos(dazsun - aspect)
+                    zsl = acos(czsl)
+                    Zsl = min(uconvert(u"°", zsl), 90u"°") # cap at 90 degrees if sun is below slope horizon
+                    intczsl = floor(Int, 100.0 * czsl + 1.0)
+                else
+                    czsl = cz
+                    zsl = z
+                    Zsl = Z
+                    intczsl = intcz
+                end
 
                 # refraction correction check
-                z = ifelse(
-                    z < 1.5358896, 
-                    z,
-                    z - ((16.0 + ((z - 1.53589) * 15) / (π / 90)) / 60) * (π / 180)
-                )
+                if z < 1.5358896
+                    # skip refraction correction
+                else
+                    refr = 16.0 + ((z - 1.53589) * 15) / (π / 90)
+                    refr = (refr / 60) * (π / 180)
+                    z -= refr
+                end
+
                 # optical air mass (Rozenberg 1966 formula p.159 in book 'Twilight') ---
                 airms = 1.0 / (cos(z) + (0.025 * exp(-11.0 * cos(z))))
                 cz = cos(z)
