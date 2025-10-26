@@ -23,12 +23,12 @@ abstract type AbstractTerrain end
 - `ω::Real=2π/365`: Mean angular orbital velocity of Earth (radians/day).
 - `se::Real=0.39779`: Precomputed solar elevation constant.
 - `d0::Real=80`: Reference day for declination calculations.
-- `iuv::Bool=false`: If `true`, uses the full scattered_uv model for diffuse radiation (expensive).
+- `scattered_uv::Bool=false`: If `true`, uses the full scattered_uv model for diffuse radiation (expensive).
 - `scattered::Bool=true`: If `true`, disables scattered light computations (faster).
-- `amr::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
+- `MR₀::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
 - `nmax::Integer=111`: Maximum number of wavelength intervals.
-- `Iλ::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
-- `OZ::Matrix{Float64}`: Ozone column depth table indexed by latitude band and month (size 19×12).
+- `λ::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
+- `ozone_column::Matrix{Float64}`: Ozone column depth table indexed by latitude band and month (size 19×12).
 - `τR`, `τO`, `τA`, `τW`: Vectors of optical depths per wavelength for Rayleigh scattering, ozone, aerosols, and water vapor.
 - `Sλ::Vector{Quantity}`: Solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`).
 - `FD`, `FDQ`: Radiation scattered from the direct solar beam and reflected radiation
@@ -37,14 +37,14 @@ abstract type AbstractTerrain end
 """
 @kwdef struct SolarProblem <: AbstractSolarRadiation
     solar_geometry_model = McCulloughPorterSolarGeometry()
-    cmH2O = 1 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
-    iuv = false # if `true` uses the full scattered_uv model for diffuse radiation (expensive)
+    cmH2O = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
+    scattered_uv = false # if `true` uses the full scattered_uv model for diffuse radiation (expensive)
     scattered = true # if `false` disables scattered light computations (faster)
-    amr = 25.0u"km" # mixing ratio height of the atmosphere
+    MR₀ = 25.0u"km" # mixing ratio height of the atmosphere
     nmax = 111 # Maximum number of wavelength intervals
     # TODO better field names
-    Iλ = DEFAULT_Iλ # cector of wavelength bins (e.g. in `nm`)
-    OZ = DEFAULT_OZ # ozone column depth table indexed by latitude band and month (size 19×12)
+    λ = DEFAULT_λ # Vector of wavelength bins (e.g. in `nm`)
+    ozone_column = DEFAULT_OZONE_COLUMN # ozone column depth table indexed by latitude band and month (size 19×12)
     τR = DEFAULT_τR # vector of optical depths per wavelength for Rayleigh scattering
     τO = DEFAULT_τO # vector of optical depths per wavelength for ozone
     τA = DEFAULT_τA # vector of optical depths per wavelength for aerosols

@@ -21,7 +21,7 @@ const NC1 = reshape(Int[
     ], 4, 8)
 
 # constants for the solar_radiation function
-const DEFAULT_Iλ = Float64.([ # wavelengths across which to integrate
+const DEFAULT_λ = Float64.([ # wavelengths across which to integrate
         290, 295, 300, 305, 310, 315, 320, 330, 340, 350, 360, 370, 380, 390,
         400, 420, 440, 460, 480, 500, 520, 540, 560, 580, 600, 620, 640, 660, 680, 700,
         720, 740, 760, 780, 800, 820, 840, 860, 880, 900, 920, 940, 960, 980, 1000, 1020,
@@ -32,7 +32,7 @@ const DEFAULT_Iλ = Float64.([ # wavelengths across which to integrate
         2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000
     ]) .* u"nm"
 
-const DEFAULT_OZ = reshape([ # seasonal variation of atmospheric ozone in cm, Robinson 1966 Table 4.2
+const DEFAULT_OZONE_COLUMN = reshape([ # seasonal variation of atmospheric ozone in cm, Robinson 1966 Table 4.2
             0.31, 0.31, 0.32, 0.32, 0.31, 0.3, 0.27, 0.24, 0.23, 0.22, 0.23, 0.24,
             0.27, 0.3, 0.32, 0.33, 0.34, 0.34, 0.33, 0.3, 0.31, 0.31, 0.31, 0.3, 0.29, 0.28,
             0.25, 0.24, 0.22, 0.24, 0.26, 0.28, 0.32, 0.36, 0.39, 0.4, 0.4, 0.39, 0.3, 0.31,
