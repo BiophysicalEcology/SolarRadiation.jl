@@ -53,22 +53,20 @@ McCullough & Porter (1971)
     d0::Real = 80
     ω::Real = 2π / 365
     ϵ::Real = 0.0167238
-    se::Real = 0.39784993 #0.39779
+    se::Real = 0.39784993
 end
 
 solar_geometry(::McCulloughPorterSolarGeometry, ::Missing, ; kwargs...) = missing
-function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity; # =83.07305u"°",
-    d::Real, # =1.0,
-    h::Quantity, # =-2.87979u"rad",
+function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
+    d::Real,
+    h::Quantity,
 )
     (; d0, ω, ϵ, se) = sm
 
     ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # eq.5 McCullough & Porter (1971)
     δ = asin(se * sin(ζ))                                           # eq.4 McCullough & Porter (1971)
     cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
-    z = acos(cosZ)u"rad"                                          
+    z = acos(cosZ)                                          
     ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
-    δ = δ * u"rad"
-    ζ = ζ * u"rad"
     return(; ζ, δ, z, ar²)
 end
