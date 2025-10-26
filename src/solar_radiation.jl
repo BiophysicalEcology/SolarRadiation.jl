@@ -68,7 +68,7 @@ function solar_radiation(solar_model::SolarProblem;
                 skylight = (10.0^log_illuminance) * 1.46e-3u"mW/cm^2"
 
                 # Assign twilight irradiance values
-                ∫D[nmax] = Skylum
+                ∫D[nmax] = skylight
                 ∫G[nmax] = ∫D[nmax]
                 G[step] = ∫G[nmax]
                 D[step] = ∫D[nmax]
