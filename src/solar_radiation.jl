@@ -4,7 +4,7 @@ function solar_radiation(model::SolarProblem, args...; kwargs...)
 end
 function solar_radiation(solar_model::SolarProblem;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
-    year::Real=2001, # TODO: this shouldn't have a default
+    year::Real=1975, # to deal with leap years in obtaining month from day of year, default to non leap year
     latitude::Number,
     solar_terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
@@ -29,17 +29,15 @@ function solar_radiation(solar_model::SolarProblem;
     gamma_buffers = allocate_scattered_radiation()
 
     # arrays to hold zenith and azimuth angles each step
-    zenith_angle = fill(90.0u"°", nsteps)                 # zenith angles
-    zenith_slope_angle = fill(90.0u"°", nsteps)               # slope zenith angles
+    zenith_angle = fill(90.0u"°", nsteps)       # zenith angles
+    zenith_slope_angle = fill(90.0u"°", nsteps) # slope zenith angles
     azimuth_angle = Vector{Union{Missing,typeof(0.0u"°")}}(undef, nsteps)
     fill!(azimuth_angle, 90.0u"°")   
-    hour_angle_sunrise = fill(0.0, ndays)                      # hour angles
-    hour_solar_noon = fill(0.0, ndays)                     # hour at solar noon
-    day_of_year = Vector{Int}(undef, nsteps)           # day of year
-    hour = Vector{Real}(undef, nsteps)         # time
+    hour_angle_sunrise = fill(0.0, ndays)       # hour angles
+    day_of_year = Vector{Int}(undef, nsteps)    # day of year
+    hour = Vector{Real}(undef, nsteps)          # time
     step = 1
     H₋ = 0.0 # initialise sunrise hour angle
-    tsn = 12.0 # initialise time of solar noon
     for i in 1:ndays
         # arrays to hold radiation for a given hour between 300 and 320 nm in 2 nm steps
         ∫G = fill(0.0u"mW/cm^2", nmax)   # integrated global radiation component (direct + scattered)
@@ -59,33 +57,29 @@ function solar_radiation(solar_model::SolarProblem;
             (; ζ, δ, z, ar²) = solar_geometry(solar_geometry_model, ϕ; d, h) # compute ecliptic, declination, zenith angle and (a/r)^2
             Z = uconvert(u"°", z)
             Zsl = Z
-            azimuth_multiplier = 1.0
-            if sign(ϕ) < 0
-                azimuth_multiplier = -1.0
+      
+            # Compute twilight skylight irradiance (Rozenberg 1966; Diem 1966) # TODO add refs to doc, Rozenberg = Twilight. Plenum Press.
+            if 88u"°" < Z < 107u"°"
+                # Log10 of illuminance (lux) as a linear function of solar zenith angle
+                log_illuminance = 41.34615384 - 0.423076923 * ustrip(u"°", Z) # p. 18,19 Rozenberg 1966
+                
+                # Convert lux → W/m² (via 1.46×10⁻³ kW/lumen)
+                # p. 239 Documenta Geigy Scientific Tables. 1966. 6th ed. K. Diem, ed.
+                skylight = (10.0^log_illuminance) * 1.46e-3u"mW/cm^2"
+
+                # Assign twilight irradiance values
+                ∫D[nmax] = Skylum
+                ∫G[nmax] = ∫D[nmax]
+                G[step] = ∫G[nmax]
+                D[step] = ∫D[nmax]
             end
-            if Z < 107.0u"°"
-                if Z > 88.0u"°"
-                    # Compute skylight based on G.V. Rozenberg. 1966. Twilight. Plenum Press.
-                    # p. 18,19.  First computing lumens: y = b - mx. Regression of data is:
-                    Elog = 41.34615384 - 0.423076923 * ustrip(u"°", Z)
-                    # Converting lux (lumen/m2) to W/m2 on horizontal surface -
-                    # Twilight - scattered skylight before sunrise or after sunset
-                    # From p. 239 Documenta Geigy Scientific Tables. 1966. 6th ed. K. Diem, ed.
-                    # Mech./elect equiv. of light = 1.46*10^-3 kW/lumen
-                    Skylum = (10.0^Elog) * 1.46E-03u"mW * cm^-2"
-                    ∫D[nmax] = Skylum
-                    ∫G[nmax] = ∫D[nmax]
-                    G[step] = ∫G[nmax]
-                    D[step] = ∫D[nmax]
-                end
-            end
+
             # testing cos(h) to see if it exceeds +1 or -1
             tanδ_tanϕ = -tan(δ) * tan(ϕ) # from eq.7 McCullough & Porter 1971
-            if abs(tanδ_tanϕ) >= 1 # long day or night
-                H₊ = π # hour angle at sunset
-            else
-                H₊ = abs(acos(tanδ_tanϕ)) # hour angle at sunset
-            end
+            # Hour angle at sunrise/sunset (radians)
+            # For polar day/night (|TDTL| ≥ 1), clamp to π
+            H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
+
             # check if sunrise
             H₋ = 12.0 * H₊ / π # hour angle at sunrise
             ts = t - tsn
@@ -104,7 +98,7 @@ function solar_radiation(solar_model::SolarProblem;
                 # tan_azimuth corresponds to tangent of azimuth
                 tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
                 # sun azimuth in radians
-                solar_azimuth = atan(tan_azimuth) * azimuth_multiplier
+                solar_azimuth = atan(tan_azimuth) * sign(latitude)
                 # azimuth in degrees
                 solar_azimuth_deg = uconvert(u"°", solar_azimuth) # TODO is this needed?
                 # correcting for hemisphere/quadrant
@@ -170,13 +164,7 @@ function solar_radiation(solar_model::SolarProblem;
 
                 # atmospheric ozone lookup
                 # convert latitude in degrees to nearest 10-degree index
-                tlat = (ϕ + 100.0u"°") / 10.0u"°"
-                llat = floor(Int, tlat)
-                allat = llat
-                ala = allat + 0.5
-                if tlat > ala
-                    llat += 1
-                end
+                llat = round(Int, (ϕ + 100u"°") / 10u"°")
                 # clamp llat index to valid range
                 mon = month(Date(year, 1, 1) + Day(d - 1)) # month from day of year
                 llat = clamp(llat, 1, size(ozone_column, 1))
@@ -249,13 +237,7 @@ function solar_radiation(solar_model::SolarProblem;
                             # (zenith angle + 5)/5 rounded off to the nearest integer value.
                             # The arrays FD and FDQ are for sea level (P = 1013 mb).
                             B = ustrip(u"°", Z) / 5
-                            IA = trunc(Int, B)
-                            C = B - IA
-                            if C > 0.5
-                                k = IA + 2
-                            else
-                                k = IA + 1
-                            end
+                            k = trunc(Int, B) + 1 + (B % 1 > 0.5)
                             flux_down = FD[n, k]
                             flux_down_div_Q = FDQ[n, k]
                             Q = (A / (1.0 - (A * s̄[n]))) # eq. 31 in Dave & Furukawa 1966
@@ -302,8 +284,6 @@ function solar_radiation(solar_model::SolarProblem;
             hour[step] = t
             step += 1
         end
-        hour_angle_sunrise[i] = H₋     # save today's sunrise hour angle
-        hour_solar_noon[i] = tsn   # save today's time of sunrise
     end
 
     return (
@@ -311,7 +291,6 @@ function solar_radiation(solar_model::SolarProblem;
         zenith_slope_angle,
         azimuth_angle,
         hour_angle_sunrise,
-        hour_solar_noon,
         day_of_year,
         hour,
         # TODO remove all this allocation from broadcasts

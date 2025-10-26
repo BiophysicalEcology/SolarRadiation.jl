@@ -16,7 +16,7 @@ Compute the solar hour angle `h` in radians.
 McCullough & Porter 1971, Eq. 6
 """
 function hour_angle(t::Real, longitude_correction::Real=0)
-    tsn = 12.0 + longitude_correction                      # solar noon time
+    tsn = 12.0 + longitude_correction      # solar noon time
     h = (π / 12) * (t - tsn) * u"rad"      # convert hours to radians
     return h, tsn
 end
@@ -63,12 +63,11 @@ function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity; #
 )
     (; d0, ω, ϵ, se) = sm
 
-    ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # Eq.5
-    δ = asin(se * sin(ζ))                                         # Eq.4
-    cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ)         # Eq.3
-    cosZ = clamp(cosZ, -1.0, 1.0)  # prevent NaN due to rounding
-    z = acos(cosZ)u"rad"                                          # Zenith angle
-    ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                   # Eq.2
+    ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # eq.5 McCullough & Porter (1971)
+    δ = asin(se * sin(ζ))                                           # eq.4 McCullough & Porter (1971)
+    cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
+    z = acos(cosZ)u"rad"                                          
+    AR2 = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
     δ = δ * u"rad"
     ζ = ζ * u"rad"
     return(; ζ, δ, z, ar²)

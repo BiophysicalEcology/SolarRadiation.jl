@@ -52,7 +52,6 @@ zenith_angle[zenith_angle.>90u"°"] .= 90u"°"
 azimuth_angle = solar_radiation_out.azimuth_angle
 
 hour_angle_sunrise = solar_radiation_out.hour_angle_sunrise
-hour_solar_noon = solar_radiation_out.hour_solar_noon
 global_total = solar_radiation_out.global_total
 direct_total = solar_radiation_out.direct_total
 diffuse_total = solar_radiation_out.diffuse_total
