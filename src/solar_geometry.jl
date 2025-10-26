@@ -67,7 +67,7 @@ function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity; #
     δ = asin(se * sin(ζ))                                           # eq.4 McCullough & Porter (1971)
     cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
     z = acos(cosZ)u"rad"                                          
-    AR2 = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
+    ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
     δ = δ * u"rad"
     ζ = ζ * u"rad"
     return(; ζ, δ, z, ar²)
