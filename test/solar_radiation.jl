@@ -22,6 +22,13 @@ names = [
 ]
 solarinput = (; zip(names, solarinput_vec)...)
 
+slope = (solarinput[:slope])*1.0u"°"
+aspect = (solarinput[:aspect])*1.0u"°"
+elevation = (solarinput[:elev])*1.0u"m"
+horizon_angles = (DataFrame(CSV.File("$testdir/data/horizon.csv"))[:, 2])*1.0u"°"
+albedo = solarinput[:REFL]*1.0
+P_atmos = solarinput[:P_atmos]*1.0u"Pa"
+scattered_uv = Bool(Int(solarinput[:IUV]))
 latitude = solarinput[:lat]*1.0u"°" # latitude
 longitude =  solarinput[:lon]*1.0u"°" # longitude
 #τA_nmr = (DataFrame(CSV.File("$testdir/data/TAI.csv"))[:, 2]*1.0)
@@ -29,30 +36,30 @@ longitude =  solarinput[:lon]*1.0u"°" # longitude
 hours = collect(0.0:1:23.0)
 days = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]*1.0
 
-solar_model = SolarProblem(; scattered_uv = Bool(Int(solarinput[:IUV])))
+solar_model = SolarProblem(; scattered_uv = scattered_uv)
+
 
 solar_terrain = SolarTerrain(;
-    slope = (solarinput[:slope])*1.0u"°",
-    aspect = (solarinput[:aspect])*1.0u"°",
-    elevation = (solarinput[:elev])*1.0u"m",
-    horizon_angles = (DataFrame(CSV.File("$testdir/data/horizon.csv"))[:, 2])*1.0u"°",
-    albedo = solarinput[:REFL]*1.0,
-    P_atmos = solarinput[:P_atmos]*1.0u"Pa",
+    horizon_angles,
 )
 
-@time solar_radiation_out = solar_radiation(solar_model;
+
+@time solar_radiation_out = solar_radiation(solar_model, latitude, elevation, 
+    slope, aspect, albedo, P_atmos;
     days,               # days of year
     hours,              # hours of day
-    latitude,           # latitude (degrees)
+    #latitude,           # latitude (degrees)
     solar_terrain,
 );
 
 zenith_angle = solar_radiation_out.zenith_angle
+zenith_slope_angle = solar_radiation_out.zenith_slope_angle
 zenith_angle[zenith_angle.>90u"°"] .= 90u"°"
 azimuth_angle = solar_radiation_out.azimuth_angle
 
 hour_angle_sunrise = solar_radiation_out.hour_angle_sunrise
 global_total = solar_radiation_out.global_total
+global_slope_total = solar_radiation_out.global_slope_total
 direct_total = solar_radiation_out.direct_total
 diffuse_total = solar_radiation_out.diffuse_total
 rayleigh_total = solar_radiation_out.rayleigh_total
@@ -60,6 +67,9 @@ direct_spectra = solar_radiation_out.direct_spectra
 diffuse_spectra = solar_radiation_out.diffuse_spectra
 rayleigh_spectra = solar_radiation_out.rayleigh_spectra
 λ = solar_radiation_out.wavelength
+
+maximum(global_total)
+maximum(global_slope_total)
 
 # Angstrom formula (formula 5.33 on P. 177 of "Climate Data and Resources" by Edward Linacre 1992
 day_of_year = repeat(days, inner=length(hours))

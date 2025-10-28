@@ -1,31 +1,30 @@
-function solar_radiation(model::SolarProblem, args...; kwargs...)
-    any(ismissing, args) && return missing
-    return solrad_core(model, args...; kwargs...)
-end
-function solar_radiation(solar_model::SolarProblem;
+solar_radiation(model::SolarProblem, args::Vararg{Missing}; kwargs...) = missing
+function solar_radiation(solar_model::SolarProblem, latitude::Number, 
+    elevation::Number, slope::Number, aspect::Number, albedo::Number, P_atmos::Number;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=1975, # to deal with leap years in obtaining month from day of year, default to non leap year
-    latitude::Number,
+    #,
     solar_terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
 )
     (; solar_geometry_model, cmH2O, scattered_uv, scattered, MR₀, nmax, λ, ozone_column, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
-    (; elevation, horizon_angles, slope, aspect, P_atmos, albedo) = solar_terrain
+    (; horizon_angles) = solar_terrain
     ϕ = latitude
     ndays = length(days)    # number of days
     ntimes = length(hours)  # number of times
     nsteps = ndays * ntimes # total time steps
 
     # arrays to hold every time step's radiation between 300 and 320 nm in 2 nm steps
-    λG = fill(0.0u"mW/nm/cm^2", nsteps, nmax) # wavelength-specific global radiation
-    λIᵣ = fill(0.0u"mW/nm/cm^2", nsteps, nmax)# wavelength-specific direct Rayleigh radiation
-    λI = fill(0.0u"mW/nm/cm^2", nsteps, nmax) # wavelength-specific direct radiation
-    λD = fill(0.0u"mW/nm/cm^2", nsteps, nmax) # wavelength-specific scattered radiation
-    G = fill(0.0u"mW/cm^2", nsteps)           # total global radiation
-    Iᵣ = fill(0.0u"mW/cm^2", nsteps)          # total direct Rayleigh radiation
-    I = fill(0.0u"mW/cm^2", nsteps)           # total direct radiation
-    D = fill(0.0u"mW/cm^2", nsteps)           # total scattered radiation
+    λG = fill(0.0u"W/nm/m^2", nsteps, nmax) # wavelength-specific global radiation
+    λIᵣ = fill(0.0u"W/nm/m^2", nsteps, nmax)# wavelength-specific direct Rayleigh radiation
+    λI = fill(0.0u"W/nm/m^2", nsteps, nmax) # wavelength-specific direct radiation
+    λD = fill(0.0u"W/nm/m^2", nsteps, nmax) # wavelength-specific scattered radiation
+    G = fill(0.0u"W/m^2", nsteps)           # total global radiation
+    G_sl = fill(0.0u"W/m^2", nsteps)        # total global radiation on sloping surface
+    Iᵣ = fill(0.0u"W/m^2", nsteps)          # total direct Rayleigh radiation
+    I = fill(0.0u"W/m^2", nsteps)           # total direct radiation
+    D = fill(0.0u"W/m^2", nsteps)           # total scattered radiation
     gamma_buffers = allocate_scattered_radiation()
 
     # arrays to hold zenith and azimuth angles each step
@@ -269,6 +268,11 @@ function solar_radiation(solar_model::SolarProblem;
                 λI[step, :] .= Iλ
                 λD[step, :] .= Dλ
                 G[step] = ∫G[nmax]
+                if slope > 0.0 && z < 90.0u"°"
+                    G_sl[step] = max(0.0u"W/m^2", (G[step] / cz) * czsl)
+                else
+                    G_sl[step] = G[step]
+                end 
                 Iᵣ[step] = ∫Iᵣ[nmax]
                 I[step] = ∫I[nmax]
                 D[step] = ∫D[nmax]
@@ -297,10 +301,11 @@ function solar_radiation(solar_model::SolarProblem;
         hour,
         # TODO remove all this allocation from broadcasts
         # why is this conversion needed, what is the 10 about
-        rayleigh_total = Iᵣ .* (10u"W/m^2" / 1u"mW/cm^2"),
-        direct_total = I .* (10u"W/m^2" / 1u"mW/cm^2"),
-        diffuse_total = D .* (10u"W/m^2" / 1u"mW/cm^2"),
-        global_total = G .* (10u"W/m^2" / 1u"mW/cm^2"),
+        rayleigh_horizontal = Iᵣ,
+        direct_horizontal = I,
+        diffuse_horizontal = D,
+        global_horizontal = G,
+        global_terrain = G_sl,
         wavelength = λ,
         rayleigh_spectra = λIᵣ .* (10u"W/m^2" / 1u"mW/cm^2"),
         direct_spectra = λI .* (10u"W/m^2" / 1u"mW/cm^2"),
