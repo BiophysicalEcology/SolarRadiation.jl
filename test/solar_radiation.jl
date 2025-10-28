@@ -58,27 +58,24 @@ zenith_angle[zenith_angle.>90u"°"] .= 90u"°"
 azimuth_angle = solar_radiation_out.azimuth_angle
 
 hour_angle_sunrise = solar_radiation_out.hour_angle_sunrise
-global_total = solar_radiation_out.global_total
-global_slope_total = solar_radiation_out.global_slope_total
-direct_total = solar_radiation_out.direct_total
-diffuse_total = solar_radiation_out.diffuse_total
-rayleigh_total = solar_radiation_out.rayleigh_total
+global_horizontal = solar_radiation_out.global_horizontal
+global_terrain = solar_radiation_out.global_terrain
+direct_horizontal = solar_radiation_out.direct_horizontal
+diffuse_horizontal = solar_radiation_out.diffuse_horizontal
+rayleigh_horizontal = solar_radiation_out.rayleigh_horizontal
 direct_spectra = solar_radiation_out.direct_spectra
 diffuse_spectra = solar_radiation_out.diffuse_spectra
 rayleigh_spectra = solar_radiation_out.rayleigh_spectra
 λ = solar_radiation_out.wavelength
 
-maximum(global_total)
-maximum(global_slope_total)
-
 # Angstrom formula (formula 5.33 on P. 177 of "Climate Data and Resources" by Edward Linacre 1992
 day_of_year = repeat(days, inner=length(hours))
 
 # diffuse spectra test needs to be 1e-2 to pass with scattered_uv=true
-#@testset "solar radiation comparisons" begin
+@testset "solar radiation comparisons" begin
     @test ustrip.(u"°", zenith_angle) ≈ zenith_nmr rtol=1e-8
-    @test ustrip.(u"W/m^2", global_total) ≈ global_nmr rtol=1e-4
+    @test ustrip.(u"W/m^2", global_horizontal) ≈ global_nmr rtol=1e-4
     @test direct_spectra ≈ direct_spectra_nmr_units rtol=1e-5
     @test diffuse_spectra ≈ diffuse_spectra_nmr_units rtol=1e-3
     @test rayleigh_spectra ≈ rayleigh_spectra_nmr_units rtol=1e-7
-#end
+end
