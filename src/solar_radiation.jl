@@ -41,10 +41,10 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
     tsn = 0.0 # initialise time solar noon
     for i in 1:ndays
         # arrays to hold radiation for a given hour between 300 and 320 nm in 2 nm steps
-        ∫G = fill(0.0u"mW/cm^2", nmax)   # integrated global radiation component (direct + scattered)
-        ∫Iᵣ = fill(0.0u"mW/cm^2", nmax)  # integrated direct Rayleigh radiation component
-        ∫I = fill(0.0u"mW/cm^2", nmax)   # integrated direct radiation component
-        ∫D = fill(0.0u"mW/cm^2", nmax)   # integrated scattered radiation component
+        ∫G = fill(0.0u"W/m^2", nmax)   # integrated global radiation component (direct + scattered)
+        ∫Iᵣ = fill(0.0u"W/m^2", nmax)  # integrated direct Rayleigh radiation component
+        ∫I = fill(0.0u"W/m^2", nmax)   # integrated direct radiation component
+        ∫D = fill(0.0u"W/m^2", nmax)   # integrated scattered radiation component
         Aλ = fill(0.0u"nm", nmax)
         Gλ = ∫G * u"1/nm"               # wavelength-specific global radiation component (direct + scattered)
         Iᵣλ = ∫G * u"1/nm"              # wavelength-specific direct Rayleigh radiation component
@@ -56,17 +56,16 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
             t = hours[j]
             h, tsn = hour_angle(t, longitude_correction) # hour angle (radians)
             (; ζ, δ, z, ar²) = solar_geometry(solar_geometry_model, ϕ; d, h) # compute ecliptic, declination, zenith angle and (a/r)^2
-            Z = uconvert(u"°", z)
-            Zsl = Z
+            zsl = z
       
             # Compute twilight skylight irradiance (Rozenberg 1966; Diem 1966) # TODO add refs to doc, Rozenberg = Twilight. Plenum Press.
-            if 88u"°" < Z < 107u"°"
+            if 88u"°" < z < 107u"°"
                 # Log10 of illuminance (lux) as a linear function of solar zenith angle
-                log_illuminance = 41.34615384 - 0.423076923 * ustrip(u"°", Z) # p. 18,19 Rozenberg 1966
+                log_illuminance = 41.34615384 - 0.423076923 * ustrip(u"°", z) # p. 18,19 Rozenberg 1966
                 
                 # Convert lux → W/m² (via 1.46×10⁻³ kW/lumen)
                 # p. 239 Documenta Geigy Scientific Tables. 1966. 6th ed. K. Diem, ed.
-                skylight = (10.0^log_illuminance) * 1.46e-3u"mW/cm^2"
+                skylight = (10.0^log_illuminance) * 1.46e-2u"W/m^2"
 
                 # Assign twilight irradiance values
                 ∫D[nmax] = skylight
@@ -92,56 +91,51 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
 
             if sun_up || tanδ_tanϕ == 1 # sun is up, proceed
                 alt = (π / 2 - z)u"rad"
-                altdeg = uconvert(u"°", alt).val
                 # tan_azimuth corresponds to tangent of azimuth
                 tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
                 # sun azimuth in radians
                 solar_azimuth = atan(tan_azimuth) * sign(latitude)
-                # azimuth in degrees
-                solar_azimuth_deg = uconvert(u"°", solar_azimuth) # TODO is this needed?
                 # correcting for hemisphere/quadrant
                 if h <= 0.0
                     # Morning - east of reference
-                    if solar_azimuth_deg <= 0.0u"°"
+                    if solar_azimuth <= 0.0u"°"
                         # 1st Quadrant (0–90°)
-                        solar_azimuth_deg = -1.0 * solar_azimuth_deg
+                        solar_azimuth = -1.0 * solar_azimuth
                     else
                         # 2nd Quadrant (90–180°)
-                        solar_azimuth_deg = 180.0u"°" - solar_azimuth_deg
+                        solar_azimuth = 180.0u"°" - solar_azimuth
                     end
                 else
                     # Afternoon - west of reference
-                    if solar_azimuth_deg < 0.0u"°"
+                    if solar_azimuth < 0.0u"°"
                         # 3rd Quadrant (180–270°)
-                        solar_azimuth_deg = 180.0u"°" - solar_azimuth_deg
+                        solar_azimuth = 180.0u"°" - solar_azimuth
                     else
                         # 4th Quadrant (270–360°)
-                        solar_azimuth_deg = 360.0u"°" - solar_azimuth_deg
+                        solar_azimuth = 360.0u"°" - solar_azimuth
                     end
                 end
                 # Special case: hour angle = 0
                 if h == 0.0
-                    solar_azimuth_deg = 180.0u"°"
+                    solar_azimuth = 180.0u"°"
                 end
 
                 cz = cos(z)
                 intcz = floor(Int, 100.0 * cz + 1.0)
-                Z = uconvert(u"°", z)  # zenith angle in degrees
 
                 # horizon angle - check this works when starting at 0 rather than e.g. 15 deg
                 azi = range(0u"°", stop=360u"°" - 360u"°" / length(horizon_angles), length=length(horizon_angles))
-                ahoriz = horizon_angles[argmin(abs.(solar_azimuth_deg .- azi))]
+                ahoriz = horizon_angles[argmin(abs.(solar_azimuth .- azi))]
 
                 # slope zenith angle calculation (Eq. 3.15 in Sellers 1965. Physical Climatology. U. Chicago Press)
                 if slope > 0u"°"
-                    czsl = cos(z) * cos(slope) + sin(z) * sin(slope) * cos(solar_azimuth_deg - aspect)
+                    czsl = cos(z) * cos(slope) + sin(z) * sin(slope) * cos(solar_azimuth - aspect)
                     zsl = acos(czsl)
-                    Zsl = min(uconvert(u"°", zsl), 90u"°") # cap at 90 degrees if sun is below slope horizon
+                    zsl = min(uconvert(u"°", zsl), 90u"°") # cap at 90 degrees if sun is below slope horizon
                     intczsl = floor(Int, 100.0 * czsl + 1.0)
                 else
                     czsl = cz
                     zsl = z
-                    Zsl = Z
                     intczsl = intcz
                 end
 
@@ -158,7 +152,6 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                 m_Zₐ = 1.0 / (cos(z) + (0.025 * exp(-11.0 * cos(z))))
                 cz = cos(z)
                 intcz = floor(Int, 100.0 * cz + 1.0)
-                Z = uconvert(u"°", z)  # zenith angle in degrees
 
                 # atmospheric ozone lookup
                 # convert latitude in degrees to nearest 10-degree index
@@ -189,27 +182,26 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                     part1 = Sλ[n] * ar² * cz
                     part2 = λτ > 0.0 ? exp(-λτ) : 0.0
                     if part2 < 1.0e-24
-                        Iλ[n] = 0.0u"mW / cm^2 / nm"
+                        Iλ[n] = 0.0u"W/m^2/nm"
                     else
-                        # TODO: ustrip to what
-                        Iλ[n] = ((ustrip(part1) * part2) / 1000.0) * u"mW / cm^2 / nm"
+                        Iλ[n] = ((ustrip(u"W/m^2/nm", part1) * part2) / 1000.0) * u"W/m^2/nm"
                     end
 
                     # so the integrator doesn't get confused at very low sun angles
-                    if Iλ[n] < 1.0e-25u"mW / cm^2 / nm"
-                        Iλ[n] = 1.0e-25u"mW / cm^2 / nm"
+                    if Iλ[n] < 1.0e-24u"W/m^2/nm"
+                        Iλ[n] = 1.0e-24u"W/m^2/nm"
                     end
 
                     Iᵣλ[n] = (Sλ[n] * ar² * cz) * exp(-float(λτR) * m_Zₐ) / 1000.0 # TODO fix units
 
-                    if altdeg < ahoriz
-                        Iλ[n] = 1.0e-25u"mW / cm^2 / nm"
-                        Iᵣλ[n] = 1.0e-25u"mW / cm^2 / nm"
+                    if alt < ahoriz
+                        Iλ[n] = 1.0e-24u"W/m^2/nm"
+                        Iᵣλ[n] = 1.0e-24u"W/m^2/nm"
                     end
 
                     # Sky (Dλ) and Global Radiation (Gλ)
                     if scattered == false
-                        Dλ[n] = 0.0u"mW / cm^2 / nm"
+                        Dλ[n] = 0.0u"W/m^2/nm"
                     elseif scattered_uv
                         if λτR >= 0.03
                             γᵣ, γₗ, s̄ = scattered_radiation!(gamma_buffers, λτR)
@@ -221,11 +213,11 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                                          exp(-float(λτR) * m_Zₐ)
                                      ) * I₀_λ
                         else
-                            Dλ[n] = 0.0u"mW / cm^2 / nm"
+                            Dλ[n] = 0.0u"W/m^2/nm"
                         end
                     else
                         if n > 11
-                            Dλ[n] = 0.0u"mW / cm^2 / nm"
+                            Dλ[n] = 0.0u"W/m^2/nm"
                         else
                             # The option scattered_uv = false has caused the program to enter this section which
                             # computes scattered radiation (Dλ) for 290 nm to 360 nm using a theory
@@ -234,7 +226,7 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                             # as FD(n,k) and FDQ(n,k) where n is the wavelength index and k is
                             # (zenith angle + 5)/5 rounded off to the nearest integer value.
                             # The arrays FD and FDQ are for sea level (P = 1013 mb).
-                            B = ustrip(u"°", Z) / 5
+                            B = ustrip(u"°", z) / 5
                             k = trunc(Int, B) + 1 + (B % 1 > 0.5)
                             flux_down = FD[n, k]
                             flux_down_div_Q = FDQ[n, k]
@@ -247,10 +239,10 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                     Gλ[n] = Dλ[n] + Iλ[n]
 
                     if n == 1
-                        ∫D[1] = 0.0u"mW / cm^2"
-                        ∫Iᵣ[1] = 0.0u"mW / cm^2"
-                        ∫I[1] = 0.0u"mW / cm^2"
-                        ∫G[1] = 0.0u"mW / cm^2"
+                        ∫D[1] = 0.0u"W/m^2"
+                        ∫Iᵣ[1] = 0.0u"W/m^2"
+                        ∫I[1] = 0.0u"W/m^2"
+                        ∫G[1] = 0.0u"W/m^2"
                     else
                         Aλ[n] = λ[n]
                         Aλ[n-1] = λ[n-1]
@@ -277,12 +269,12 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
                 I[step] = ∫I[nmax]
                 D[step] = ∫D[nmax]
             else # sunrise, sunset or long day
-                solar_azimuth_deg = missing
+                solar_azimuth = missing
             end
             # Store into row `step`
-            zenith_angle[step] = Z
-            zenith_slope_angle[step] = Zsl
-            azimuth_angle[step] = solar_azimuth_deg
+            zenith_angle[step] = uconvert(u"°", z)
+            zenith_slope_angle[step] = uconvert(u"°", zsl)
+            azimuth_angle[step] = uconvert(u"°", solar_azimuth)
             day_of_year[step] = d
             hour[step] = t
             step += 1
@@ -299,17 +291,15 @@ function solar_radiation(solar_model::SolarProblem, latitude::Number,
         hour_solar_noon,
         day_of_year,
         hour,
-        # TODO remove all this allocation from broadcasts
-        # why is this conversion needed, what is the 10 about
         rayleigh_horizontal = Iᵣ,
         direct_horizontal = I,
         diffuse_horizontal = D,
         global_horizontal = G,
         global_terrain = G_sl,
         wavelength = λ,
-        rayleigh_spectra = λIᵣ .* (10u"W/m^2" / 1u"mW/cm^2"),
-        direct_spectra = λI .* (10u"W/m^2" / 1u"mW/cm^2"),
-        diffuse_spectra = λD .* (10u"W/m^2" / 1u"mW/cm^2"),
-        global_spectra = λG .* (10u"W/m^2" / 1u"mW/cm^2"),
+        rayleigh_spectra = λIᵣ,
+        direct_spectra = λI,
+        diffuse_spectra = λD,
+        global_spectra = λG,
     )
 end
