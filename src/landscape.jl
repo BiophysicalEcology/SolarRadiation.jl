@@ -1,12 +1,12 @@
 abstract type AbstractTerrain end
 
 @kwdef struct SolarTerrain <: AbstractTerrain
-    elevation
+    #elevation
     horizon_angles
-    slope
-    aspect
-    albedo
-    P_atmos
+    #slope
+    #aspect
+    #albedo
+    #P_atmos
  end
 
  abstract type AbstractSolarRadiation end

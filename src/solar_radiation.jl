@@ -1,17 +1,15 @@
-function solar_radiation(model::SolarProblem, args...; kwargs...)
-    any(ismissing, args) && return missing
-    return solrad_core(model, args...; kwargs...)
-end
-function solar_radiation(solar_model::SolarProblem;
+solar_radiation(model::SolarProblem, args::Vararg{Missing}; kwargs...) = missing
+function solar_radiation(solar_model::SolarProblem, latitude::Number, 
+    elevation::Number, slope::Number, aspect::Number, albedo::Number, P_atmos::Number;
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=1975, # to deal with leap years in obtaining month from day of year, default to non leap year
-    latitude::Number,
+    #,
     solar_terrain::SolarTerrain,
     longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
 )
     (; solar_geometry_model, cmH2O, scattered_uv, scattered, MR₀, nmax, λ, ozone_column, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
-    (; elevation, horizon_angles, slope, aspect, P_atmos, albedo) = solar_terrain
+    (; horizon_angles) = solar_terrain
     ϕ = latitude
     ndays = length(days)    # number of days
     ntimes = length(hours)  # number of times
@@ -23,6 +21,7 @@ function solar_radiation(solar_model::SolarProblem;
     λI = fill(0.0u"W/nm/m^2", nsteps, nmax) # wavelength-specific direct radiation
     λD = fill(0.0u"W/nm/m^2", nsteps, nmax) # wavelength-specific scattered radiation
     G = fill(0.0u"W/m^2", nsteps)           # total global radiation
+    G_sl = fill(0.0u"W/m^2", nsteps)        # total global radiation on sloping surface
     Iᵣ = fill(0.0u"W/m^2", nsteps)          # total direct Rayleigh radiation
     I = fill(0.0u"W/m^2", nsteps)           # total direct radiation
     D = fill(0.0u"W/m^2", nsteps)           # total scattered radiation
@@ -185,7 +184,6 @@ function solar_radiation(solar_model::SolarProblem;
                     if part2 < 1.0e-24
                         Iλ[n] = 0.0u"W/m^2/nm"
                     else
-                        # TODO: ustrip to what
                         Iλ[n] = ((ustrip(u"W/m^2/nm", part1) * part2) / 1000.0) * u"W/m^2/nm"
                     end
 
@@ -262,6 +260,11 @@ function solar_radiation(solar_model::SolarProblem;
                 λI[step, :] .= Iλ
                 λD[step, :] .= Dλ
                 G[step] = ∫G[nmax]
+                if slope > 0.0 && z < 90.0u"°"
+                    G_sl[step] = max(0.0u"W/m^2", (G[step] / cz) * czsl)
+                else
+                    G_sl[step] = G[step]
+                end 
                 Iᵣ[step] = ∫Iᵣ[nmax]
                 I[step] = ∫I[nmax]
                 D[step] = ∫D[nmax]
@@ -288,12 +291,11 @@ function solar_radiation(solar_model::SolarProblem;
         hour_solar_noon,
         day_of_year,
         hour,
-        # TODO remove all this allocation from broadcasts
-        # why is this conversion needed, what is the 10 about
-        rayleigh_total = Iᵣ,
-        direct_total = I,
-        diffuse_total = D,
-        global_total = G,
+        rayleigh_horizontal = Iᵣ,
+        direct_horizontal = I,
+        diffuse_horizontal = D,
+        global_horizontal = G,
+        global_terrain = G_sl,
         wavelength = λ,
         rayleigh_spectra = λIᵣ,
         direct_spectra = λI,
