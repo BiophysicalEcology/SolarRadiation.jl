@@ -17,20 +17,19 @@ diffuse_spectra_nmr_units = diffuse_spectra_nmr*u"W/m^2/nm"
 
 # NicheMapR simulation parameters
 solarinput_vec = DataFrame(CSV.File("$testdir/data/input.csv"))[:, 2]
-names = [
-    :lon, :lat, :EC, :elev, :slope, :aspect, :lamb, :IUV, :REFL, :P_atmos
-]
+names = [:lon, :lat, :EC, :elev, :slope, :aspect, :lamb, :IUV, :REFL, :P_atmos]
 solarinput = (; zip(names, solarinput_vec)...)
 
+# Conversions to unitful units
 slope = (solarinput[:slope])*1.0u"°"
 aspect = (solarinput[:aspect])*1.0u"°"
 elevation = (solarinput[:elev])*1.0u"m"
 horizon_angles = (DataFrame(CSV.File("$testdir/data/horizon.csv"))[:, 2])*1.0u"°"
 albedo = solarinput[:REFL]*1.0
-P_atmos = solarinput[:P_atmos]*1.0u"Pa"
+atmospheric_pressure = solarinput[:P_atmos]*1.0u"Pa"
 scattered_uv = Bool(Int(solarinput[:IUV]))
-latitude = solarinput[:lat]*1.0u"°" # latitude
-longitude =  solarinput[:lon]*1.0u"°" # longitude
+latitude = solarinput[:lat]*1.0u"°"
+longitude = solarinput[:lon]*1.0u"°"
 #τA_nmr = (DataFrame(CSV.File("$testdir/data/TAI.csv"))[:, 2]*1.0)
 
 hours = collect(0.0:1:23.0)
@@ -38,18 +37,14 @@ days = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]*1.0
 
 solar_model = SolarProblem(; scattered_uv = scattered_uv)
 
-
 solar_terrain = SolarTerrain(;
-    horizon_angles,
+    horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure, latitude, longitude
 )
 
-
-@time solar_radiation_out = solar_radiation(solar_model, latitude, elevation, 
-    slope, aspect, albedo, P_atmos;
+@time solar_radiation_out = solar_radiation(solar_model; 
+    solar_terrain,
     days,               # days of year
     hours,              # hours of day
-    #latitude,           # latitude (degrees)
-    solar_terrain,
 );
 
 zenith_angle = solar_radiation_out.zenith_angle
