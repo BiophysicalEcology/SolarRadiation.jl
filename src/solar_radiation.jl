@@ -1,14 +1,15 @@
-solar_radiation(model::SolarProblem, args::Vararg{Missing}; kwargs...) = missing
-function solar_radiation(solar_model::SolarProblem, latitude::Number;
+function solar_radiation(solar_model::SolarProblem;
     solar_terrain::SolarTerrain,
     # TODO reothingk these date/time keywords
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=1975, # to deal with leap years in obtaining month from day of year, default to non leap year
-    longitude_correction::Real=0.0, # longitude correction, hours
     hours::AbstractVector{<:Real}=0:1:23,
+    # TODO this should be calculated from longitude,
+    # but first we need real dates and time zones.
+    longitude_correction::Real=0.0, # longitude correction, hours
 )
     (; solar_geometry_model, cmH2O, scattered_uv, scattered, MR₀, nmax, λ, ozone_column, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
-    (; horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure) = solar_terrain
+    (; horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure, latitude) = solar_terrain
 
     ϕ = latitude
     ndays = length(days)    # number of days
