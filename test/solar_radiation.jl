@@ -61,7 +61,7 @@ rayleigh_horizontal = solar_radiation_out.rayleigh_horizontal
 direct_spectra = solar_radiation_out.direct_spectra
 diffuse_spectra = solar_radiation_out.diffuse_spectra
 rayleigh_spectra = solar_radiation_out.rayleigh_spectra
-λ = solar_radiation_out.wavelength
+λ = solar_radiation_out.wavelengths
 
 # Angstrom formula (formula 5.33 on P. 177 of "Climate Data and Resources" by Edward Linacre 1992
 day_of_year = repeat(days, inner=length(hours))

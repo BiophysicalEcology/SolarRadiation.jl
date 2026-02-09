@@ -8,7 +8,19 @@ function solar_radiation(solar_model::SolarProblem;
     # but first we need real dates and time zones.
     longitude_correction::Real=0.0, # longitude correction, hours
 )
-    (; solar_geometry_model, cmH2O, scattered_uv, scattered, MR₀, nmax, λ, ozone_column, τR, τO, τA, τW, Sλ, FD, FDQ, s̄) = solar_model
+    (; solar_geometry_model, precipitable_water, scattered_uv, scattered, mixing_ratio_height,
+       wavelength_count, wavelengths, ozone_column, rayleigh_optical_depth, ozone_optical_depth,
+       aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance,
+       diffuse_sky_irradiance, diffuse_ground_reflected, single_scattering_albedo) = solar_model
+    # Short aliases for use in equations
+    nmax = wavelength_count
+    λ = wavelengths
+    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
+    Sλ = solar_spectral_irradiance
+    FD, FDQ = diffuse_sky_irradiance, diffuse_ground_reflected
+    s̄ = single_scattering_albedo
+    cmH2O = precipitable_water
+    MR₀ = mixing_ratio_height
     (; horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure, latitude) = solar_terrain
 
     ϕ = latitude
@@ -56,7 +68,9 @@ function solar_radiation(solar_model::SolarProblem;
             d = days[i]
             t = hours[j]
             h, tsn = hour_angle(t, longitude_correction) # hour angle (radians)
-            (; ζ, δ, z, ar²) = solar_geometry(solar_geometry_model, ϕ; d, h) # compute ecliptic, declination, zenith angle and (a/r)^2
+            solar_geom = solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h)
+            # Short aliases for equations
+            ζ, δ, z, ar² = solar_geom.solar_longitude, solar_geom.solar_declination, solar_geom.zenith_angle, solar_geom.sun_distance_factor
             zsl = z
       
             # Compute twilight skylight irradiance (Rozenberg 1966; Diem 1966) # TODO add refs to doc, Rozenberg = Twilight. Plenum Press.
@@ -297,7 +311,7 @@ function solar_radiation(solar_model::SolarProblem;
         diffuse_horizontal = D,
         global_horizontal = G,
         global_terrain = G_sl,
-        wavelength = λ,
+        wavelengths = λ,
         rayleigh_spectra = λIᵣ,
         direct_spectra = λI,
         diffuse_spectra = λD,

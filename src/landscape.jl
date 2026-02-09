@@ -14,45 +14,40 @@ abstract type AbstractTerrain end
  abstract type AbstractSolarRadiation end
 
 """
-    SolarRadiation
+    SolarProblem
 
-# TODO who wrote this model what is it called
+Solar radiation model parameters.
 
 # Keyword Arguments
 
-- `cmH2O::Real=1`: Precipitable water in cm for atmospheric column (e.g. 0.1: dry, 1.0: moist, 2.0: humid).
-- `ϵ::Real=0.0167238`: Orbital eccentricity of Earth.
-- `ω::Real=2π/365`: Mean angular orbital velocity of Earth (radians/day).
-- `se::Real=0.39779`: Precomputed solar elevation constant.
-- `d0::Real=80`: Reference day for declination calculations.
+- `precipitable_water::Real=1`: Precipitable water in cm for atmospheric column (e.g. 0.1: dry, 1.0: moist, 2.0: humid).
 - `scattered_uv::Bool=false`: If `true`, uses the full scattered_uv model for diffuse radiation (expensive).
-- `scattered::Bool=true`: If `true`, disables scattered light computations (faster).
-- `MR₀::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
-- `nmax::Integer=111`: Maximum number of wavelength intervals.
-- `λ::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
+- `scattered::Bool=true`: If `false`, disables scattered light computations (faster).
+- `mixing_ratio_height::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
+- `wavelength_count::Integer=111`: Maximum number of wavelength intervals.
+- `wavelengths::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
 - `ozone_column::Matrix{Float64}`: Ozone column depth table indexed by latitude band and month (size 19×12).
-- `τR`, `τO`, `τA`, `τW`: Vectors of optical depths per wavelength for Rayleigh scattering, ozone, aerosols, and water vapor.
-- `Sλ::Vector{Quantity}`: Solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`).
-- `FD`, `FDQ`: Radiation scattered from the direct solar beam and reflected radiation
+- `rayleigh_optical_depth`, `ozone_optical_depth`, `aerosol_optical_depth`, `water_optical_depth`: Vectors of optical depths per wavelength.
+- `solar_spectral_irradiance::Vector{Quantity}`: Solar spectral irradiance per wavelength bin.
+- `diffuse_sky_irradiance`, `diffuse_ground_reflected`: Radiation scattered from the direct solar beam and reflected radiation
     rescattered downward as a function of wavelength, from tables in Dave & Furukawa (1966).
-- `s̄`: a function of τR linked to molecular scattering in the UV range (< 360 nm)
+- `single_scattering_albedo`: Molecular scattering function in the UV range (< 360 nm).
 """
 @kwdef struct SolarProblem <: AbstractSolarRadiation
     solar_geometry_model = McCulloughPorterSolarGeometry()
-    cmH2O = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
+    precipitable_water = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
     scattered_uv = false # if `true` uses the full scattered_uv model for diffuse radiation (expensive)
     scattered = true # if `false` disables scattered light computations (faster)
-    MR₀ = 25.0u"km" # mixing ratio height of the atmosphere
-    nmax = 111 # Maximum number of wavelength intervals
-    # TODO better field names
-    λ = DEFAULT_λ # Vector of wavelength bins (e.g. in `nm`)
+    mixing_ratio_height = 25.0u"km" # mixing ratio height of the atmosphere
+    wavelength_count = 111 # Maximum number of wavelength intervals
+    wavelengths = DEFAULT_WAVELENGTHS # Vector of wavelength bins (e.g. in `nm`)
     ozone_column = DEFAULT_OZONE_COLUMN # ozone column depth table indexed by latitude band and month (size 19×12)
-    τR = DEFAULT_τR # vector of optical depths per wavelength for Rayleigh scattering
-    τO = DEFAULT_τO # vector of optical depths per wavelength for ozone
-    τA = DEFAULT_τA # vector of optical depths per wavelength for aerosols
-    τW = DEFAULT_τW # vector of optical depths per wavelength for water vapor
-    Sλ = DEFAULT_Sλ # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
-    FD = DEFAULT_FD # interpolated function of radiation scattered from the direct solar beam
-    FDQ = DEFAULT_FDQ # interpolated function of radiation scattered from ground-reflected radiation
-    s̄ = DEFAULT_s̄ # a function of τR linked to molecular scattering in the UV range (< 360 nm)
+    rayleigh_optical_depth = DEFAULT_RAYLEIGH_OPTICAL_DEPTH # vector of optical depths per wavelength for Rayleigh scattering
+    ozone_optical_depth = DEFAULT_OZONE_OPTICAL_DEPTH # vector of optical depths per wavelength for ozone
+    aerosol_optical_depth = DEFAULT_AEROSOL_OPTICAL_DEPTH # vector of optical depths per wavelength for aerosols
+    water_optical_depth = DEFAULT_WATER_OPTICAL_DEPTH # vector of optical depths per wavelength for water vapor
+    solar_spectral_irradiance = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
+    diffuse_sky_irradiance = DEFAULT_DIFFUSE_SKY_IRRADIANCE # interpolated function of radiation scattered from the direct solar beam
+    diffuse_ground_reflected = DEFAULT_DIFFUSE_GROUND_REFLECTED # interpolated function of radiation scattered from ground-reflected radiation
+    single_scattering_albedo = DEFAULT_SINGLE_SCATTERING_ALBEDO # a function of τR linked to molecular scattering in the UV range (< 360 nm)
 end
