@@ -458,6 +458,8 @@ function chandrasekhar_xy!(buffers, τ::Float64, characteristic_function_coeffs:
         end
     end
     # --- COMPUTE C₀ AND C₁ ---
+    NC0 = CHANDRASEKHAR_C0_INDICES
+    NC1 = CHANDRASEKHAR_C1_INDICES
 
     temp_X[1] = 1.0
     temp_X[8] = 1.0

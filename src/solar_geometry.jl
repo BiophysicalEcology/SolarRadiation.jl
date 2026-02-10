@@ -24,49 +24,51 @@ end
 abstract type AbstractSolarGeometryModel end
 
 """
-    solar_geometry(d::Real, latitude::Quantity, h::Quantity; d0::Real = 80, ω::Real = 2π/365, ϵ::Real = 0.0167, se::Real = 0.39779)
+    solar_geometry(latitude; day_of_year, hour_angle)
 
-Computes key solar geometry parameters based on McCullough & Porter (1971):
-
-- `ζ`: Auxiliary solar longitude (radians)
-- `δ`: Solar declination (radians)
-- `z`: Solar zenith angle (radians)
-- `ar²`: Square of Earth-to-Sun radius factor (unitless)
+Computes key solar geometry parameters based on McCullough & Porter (1971).
 
 # Arguments
-- `d`: Day of year (1–365)
 - `latitude`: Latitude (with angle units, e.g. `u"°"` or `u"rad"`)
-- `h`: Hour angle (radians)
-
-- `d0`: Reference day (default: 80)
-- `ω`: Angular frequency of Earth’s orbit (default: `2π/365`)
-- `ϵ`: Orbital eccentricity (default: `0.0167`)
-- `se`: Constant for solar declination amplitude (default: `0.39779`)
+- `day_of_year`: Day of year (1–365)
+- `hour_angle`: Hour angle (radians)
 
 # Returns
-Tuple: `(ζ, δ, z, ar²)` with angle quantities in radians and ar² unitless.
+NamedTuple with:
+- `solar_longitude`: Auxiliary solar longitude (radians)
+- `solar_declination`: Solar declination (radians)
+- `zenith_angle`: Solar zenith angle (radians)
+- `sun_distance_factor`: Square of Earth-to-Sun radius factor (unitless)
 
 # Reference
 McCullough & Porter (1971)
 """
 @kwdef struct McCulloughPorterSolarGeometry <: AbstractSolarGeometryModel
-    d0::Real = 80
-    ω::Real = 2π / 365
-    ϵ::Real = 0.0167238
-    se::Real = 0.39784993
+    reference_day::Real = 80
+    orbital_angular_frequency::Real = 2π / 365
+    orbital_eccentricity::Real = 0.0167238
+    declination_amplitude::Real = 0.39784993
 end
 
-solar_geometry(::McCulloughPorterSolarGeometry, ::Missing, ; kwargs...) = missing
+solar_geometry(::McCulloughPorterSolarGeometry, ::Missing; kwargs...) = missing
 function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
-    d::Real,
-    h::Quantity,
+    day_of_year::Real,
+    hour_angle::Quantity,
 )
-    (; d0, ω, ϵ, se) = sm
+    (; reference_day, orbital_angular_frequency, orbital_eccentricity, declination_amplitude) = sm
+    # Use short aliases for equations (standard notation)
+    d0, ω, ϵ, se = reference_day, orbital_angular_frequency, orbital_eccentricity, declination_amplitude
+    d, h = day_of_year, hour_angle
 
     ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # eq.5 McCullough & Porter (1971)
     δ = asin(se * sin(ζ))                                           # eq.4 McCullough & Porter (1971)
     cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
-    z = acos(cosZ)                                          
+    z = acos(cosZ)
     ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
-    return(; ζ, δ, z, ar²)
+    return (;
+        solar_longitude = ζ,
+        solar_declination = δ,
+        zenith_angle = z,
+        sun_distance_factor = ar²
+    )
 end
