@@ -1,16 +1,15 @@
 """
-    hour_angle(t::Quantity, longitude_correction::Quantity) -> Quantity
+    hour_angle(t::Real, longitude_correction::Real=0) -> (h, tsn)
 
 Compute the solar hour angle `h` in radians.
 
 # Arguments
 - `t`: Local solar hour (e.g., `14.0`)
-- `longitude_correction`: Longitude correction in hours (e.g., `0.5`)
+- `longitude_correction`: Longitude correction in hours (e.g., `0.5`), default `0`
 
 # Returns
-
-- Hour angle `h` as a `Quantity` in radians
-- Time at solar noon, `tsn` as a time in hours
+- `h`: Hour angle as a `Quantity` in radians
+- `tsn`: Time at solar noon in hours
 
 # Reference
 McCullough & Porter 1971, Eq. 6
@@ -24,12 +23,31 @@ end
 abstract type AbstractSolarGeometryModel end
 
 """
-    solar_geometry(latitude; day_of_year, hour_angle)
+    McCulloughPorterSolarGeometry
 
-Computes key solar geometry parameters based on McCullough & Porter (1971).
+Solar geometry model based on McCullough & Porter (1971).
+
+# Fields
+- `reference_day`: Vernal equinox day of year (default: 80)
+- `orbital_angular_frequency`: Earth's orbital angular frequency (default: 2π/365)
+- `orbital_eccentricity`: Earth's orbital eccentricity (default: 0.0167238)
+- `declination_amplitude`: Solar declination amplitude (default: 0.39784993)
+"""
+@kwdef struct McCulloughPorterSolarGeometry <: AbstractSolarGeometryModel
+    reference_day::Real = 80
+    orbital_angular_frequency::Real = 2π / 365
+    orbital_eccentricity::Real = 0.0167238
+    declination_amplitude::Real = 0.39784993
+end
+
+"""
+    solar_geometry(model::McCulloughPorterSolarGeometry, latitude; day_of_year, hour_angle)
+
+Compute solar geometry parameters based on McCullough & Porter (1971).
 
 # Arguments
-- `latitude`: Latitude (with angle units, e.g. `u"°"` or `u"rad"`)
+- `model`: Solar geometry model with orbital parameters
+- `latitude`: Observer latitude (with angle units, e.g. `u"°"` or `u"rad"`)
 - `day_of_year`: Day of year (1–365)
 - `hour_angle`: Hour angle (radians)
 
@@ -43,13 +61,6 @@ NamedTuple with:
 # Reference
 McCullough & Porter (1971)
 """
-@kwdef struct McCulloughPorterSolarGeometry <: AbstractSolarGeometryModel
-    reference_day::Real = 80
-    orbital_angular_frequency::Real = 2π / 365
-    orbital_eccentricity::Real = 0.0167238
-    declination_amplitude::Real = 0.39784993
-end
-
 solar_geometry(::McCulloughPorterSolarGeometry, ::Missing; kwargs...) = missing
 function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
     day_of_year::Real,
@@ -65,10 +76,50 @@ function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
     cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
     z = acos(cosZ)
     ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
+
     return (;
         solar_longitude = ζ,
         solar_declination = δ,
         zenith_angle = z,
         sun_distance_factor = ar²
     )
+end
+
+"""
+    solar_azimuth_angle(hour_angle, latitude, declination)
+
+Compute solar azimuth angle with quadrant correction.
+
+# Arguments
+- `hour_angle`: Hour angle (radians, negative=morning, positive=afternoon)
+- `latitude`: Observer latitude (with angle units)
+- `declination`: Solar declination (radians)
+
+# Returns
+Solar azimuth angle in degrees (0-360°, measured clockwise from north)
+"""
+function solar_azimuth_angle(hour_angle, latitude, declination)
+    h, ϕ, δ = hour_angle, latitude, declination
+
+    tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
+    azimuth = atan(tan_azimuth) * sign(latitude)
+
+    # Correct for hemisphere/quadrant
+    azimuth = if h == 0.0 # Special case: solar noon
+        180.0u"°"
+    elseif h <= 0.0 # Morning - east of reference
+        if azimuth <= 0.0u"°"
+            -azimuth  # 1st Quadrant (0–90°)
+        else
+            180.0u"°" - azimuth  # 2nd Quadrant (90–180°)
+        end
+    else # Afternoon - west of reference
+        if azimuth < 0.0u"°"
+            180.0u"°" - azimuth  # 3rd Quadrant (180–270°)
+        else
+            360.0u"°" - azimuth  # 4th Quadrant (270–360°)
+        end
+    end
+
+    return azimuth
 end

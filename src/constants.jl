@@ -19,6 +19,52 @@ const CHANDRASEKHAR_C1_INDICES = reshape(Int[
         1, 2, 3, 4,
     ], 4, 8)
 
+# Twilight irradiance constants
+# Log10(illuminance) = TWILIGHT_LOG_INTERCEPT - TWILIGHT_LOG_SLOPE * zenith_angle(°)
+# p. 18-19 Rozenberg (1966) "Twilight"
+const TWILIGHT_LOG_INTERCEPT = 41.34615384
+const TWILIGHT_LOG_SLOPE = 0.423076923
+
+# Lux to W/m² conversion factor
+# p. 239 Documenta Geigy Scientific Tables (Diem 1966)
+const LUX_TO_WATTS_PER_M2 = 1.46e-2
+
+# Atmospheric refraction threshold (88° in radians)
+# Refraction correction applied for Z > 88°
+# McCullough & Porter (1971) Table 2
+const REFRACTION_ZENITH_THRESHOLD = 88.0 * π / 180  # 1.5358897 rad
+
+# Refraction formula constants: R = REFRACTION_BASE + (Za - 88) * REFRACTION_SCALE minutes of arc
+# McCullough & Porter (1971) eq. above Table 2
+const REFRACTION_BASE_ARCMIN = 16.0
+const REFRACTION_SCALE_ARCMIN_PER_DEG = 10.0
+
+# Rozenberg (1966) optical air mass formula constants
+# m = 1 / (cos(z) + AIR_MASS_A * exp(-AIR_MASS_B * cos(z)))
+# p. 159 Rozenberg (1966) "Twilight", eq. III.3.17
+const AIR_MASS_A = 0.025
+const AIR_MASS_B = 11.0
+
+# Minimum Rayleigh optical depth for Chandrasekhar scattering calculation
+const MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR = 0.03
+
+# Reference ozone column depth (cm NTP)
+# McCullough & Porter (1971), used with Elterman tabulations
+const REFERENCE_OZONE_DEPTH_CM = 0.34
+
+# Maximum optical depth clamp (numerical stability)
+const MAX_OPTICAL_DEPTH = 80.0
+
+# Minimum irradiance for numerical stability (W/m²/nm)
+const MIN_IRRADIANCE = 1.0e-24
+
+# Reference sea-level atmospheric pressure (Pa)
+const REFERENCE_PRESSURE = 101300.0u"Pa"
+
+# Reference sea-level meteorological range (visibility at 0.55 μm)
+# McCullough & Porter (1971)
+const REFERENCE_VISIBILITY = 25.0u"km"
+
 # constants for the solar_radiation function
 const DEFAULT_WAVELENGTHS = Float64.([ # wavelengths across which to integrate
         290, 295, 300, 305, 310, 315, 320, 330, 340, 350, 360, 370, 380, 390,
