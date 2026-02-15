@@ -102,11 +102,13 @@ function solar_azimuth_angle(hour_angle, latitude, declination)
     h, ϕ, δ = hour_angle, latitude, declination
 
     tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
-    azimuth = atan(tan_azimuth) * sign(latitude)
+    azimuth = atan(tan_azimuth)
 
     # Correct for hemisphere/quadrant
     azimuth = if h == 0.0 # Special case: solar noon
-        180.0u"°"
+        # Sun is south when observer is poleward of sub-solar point (denominator < 0
+        # at h=0), north otherwise.
+        (cos(ϕ) * tan(δ) - sin(ϕ)) < 0 ? 180.0u"°" : 0.0u"°"
     elseif h <= 0.0 # Morning - east of reference
         if azimuth <= 0.0u"°"
             -azimuth  # 1st Quadrant (0–90°)
