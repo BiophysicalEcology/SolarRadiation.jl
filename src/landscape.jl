@@ -9,20 +9,20 @@ McCullough & Porter (1971) model.
 struct NoScattering <: AbstractDiffuseModel end
 
 """
-    DaveFurukawa <: AbstractDiffuseModel
+    DaveFurukawaScattering <: AbstractDiffuseModel
 
 Diffuse UV irradiance from pre-tabulated lookup tables (Dave & Furukawa 1966).
 Only applies to the first 11 wavelength intervals (UV range, < ~380 nm).
 This is the default diffuse model.
 """
-struct DaveFurukawa <: AbstractDiffuseModel end
+struct DaveFurukawaScattering <: AbstractDiffuseModel end
 
 """
     ChandrasekharScattering <: AbstractDiffuseModel
 
 Full diffuse irradiance using Chandrasekhar's iterative X and Y functions.
 Applies to all wavelengths. More accurate but significantly more expensive than
-`DaveFurukawa`. Equivalent to `scattered_uv=true` in the original model.
+`DaveFurukawaScattering`. Equivalent to `scattered_uv=true` in the original model.
 """
 struct ChandrasekharScattering <: AbstractDiffuseModel end
 
@@ -54,8 +54,8 @@ Solar radiation model parameters.
 # Keyword Arguments
 
 - `precipitable_water::Real=1`: Precipitable water in cm for atmospheric column (e.g. 0.1: dry, 1.0: moist, 2.0: humid).
-- `diffuse_model::AbstractDiffuseModel=DaveFurukawa()`: Diffuse radiation algorithm. Options:
-  - `DaveFurukawa()` (default): lookup-table method for UV wavelengths only (Dave & Furukawa 1966).
+- `diffuse_model::AbstractDiffuseModel=DaveFurukawaScattering()`: Diffuse radiation algorithm. Options:
+  - `DaveFurukawaScattering()` (default): lookup-table method for UV wavelengths only (Dave & Furukawa 1966).
   - `ChandrasekharScattering()`: full iterative X/Y function method, all wavelengths (expensive).
   - `NoScattering()`: disables all diffuse radiation.
 - `mixing_ratio_height::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
@@ -71,7 +71,7 @@ Solar radiation model parameters.
 @kwdef struct SolarProblem <: AbstractSolarRadiation
     solar_geometry_model = McCulloughPorterSolarGeometry()
     precipitable_water = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
-    diffuse_model::AbstractDiffuseModel = DaveFurukawa()
+    diffuse_model::AbstractDiffuseModel = DaveFurukawaScattering()
     mixing_ratio_height = 25.0u"km" # mixing ratio height of the atmosphere
     wavelength_count = 111 # Maximum number of wavelength intervals
     wavelengths = DEFAULT_WAVELENGTHS # Vector of wavelength bins (e.g. in `nm`)

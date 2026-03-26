@@ -130,7 +130,7 @@ Dispatches on `diffuse_model` to select the scattering algorithm.
 """
 diffuse_irradiance(::NoScattering, args...) = 0.0u"W/m^2/nm"
 
-function diffuse_irradiance(::DaveFurukawa, n, λτR, buffers, cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
+function diffuse_irradiance(::DaveFurukawaScattering, n, λτR, buffers, cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
     # Dave & Furukawa lookup table method (UV wavelengths only)
     n > 11 && return 0.0u"W/m^2/nm"
     B = ustrip(u"°", z) / 5
@@ -270,7 +270,7 @@ function allocate_buffers(nmax, ::AbstractDiffuseModel)
 end
 
 function allocate_buffers(nmax, ::ChandrasekharScattering)
-    base = allocate_buffers(nmax, DaveFurukawa())
+    base = allocate_buffers(nmax, DaveFurukawaScattering())
     gamma = allocate_scattered_radiation()
     return (; base..., gamma)
 end
