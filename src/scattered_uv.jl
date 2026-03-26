@@ -632,9 +632,9 @@ end
     converged = false
 
     while !converged
-        for i in 2:101
-            fnx_i = fn_X[i] 
-            fny_i = fn_Y[i] 
+        @inbounds for i in 2:101
+            fnx_i = fn_X[i]
+            fny_i = fn_Y[i]
             amu_i = μ[i]
 
             #######################################################################################################
@@ -642,10 +642,10 @@ end
             # The most performance-intensive code of the package: loop inside loop inside while, called from another loop
             # Possibly there is a faster algorithm?
             # works marginally better when each line is separate
-            for j in 1:101
+            @simd for j in 1:101
                 X_d_values[j] = Ψ[j] * (fnx_i * fn_X[j] - fny_i * fn_Y[j]) / (amu_i + μ[j])
             end
-            for j in 1:101
+            @simd for j in 1:101
                 X_e_values[j] = Ψ[j] * (fny_i * fn_X[j] - fnx_i * fn_Y[j]) / (amu_i - μ[j])
             end
             #######################################################################################################
@@ -661,13 +661,12 @@ end
                 5.0*X_e_values[i-1] + 10.0*X_e_values[i-3] + X_e_values[i-5] - 10.0*X_e_values[i-2] - 5.0*X_e_values[i-4]
             end
 
-
             #########################################################
             # Second most expensive code in the package
             # is a huge performance gain
             sxd = 0.0
             sxe = 0.0
-            for ic in 1:101
+            @simd for ic in 1:101
                 sxd += quad_weights_Xa[ic] * X_d_values[ic]
                 sxe += quad_weights_Xa[ic] * X_e_values[ic]
             end
@@ -678,7 +677,7 @@ end
         end
 
         # Correction to X and Y
-        for i in 1:101
+        @inbounds @simd for i in 1:101
             temp_d = temp_c * μ[i] * (1.0 - quad_weights_Xb[i])
             X[i] = X_approx[i] + temp_d
             Y[i] = Y_approx[i] + temp_d
@@ -686,7 +685,7 @@ end
 
         # Check convergence (same as before)
         if num_iterations > 1
-            for i in 2:101
+            @inbounds for i in 2:101
                 rel_error = abs((Y[i] - fn_Y[i]) / Y[i])
                 # TODO this seems wrong? shouldnt it only break if errors are <= 2.0e-4 for all i ?
                 if rel_error <= 2.0e-4
@@ -697,7 +696,7 @@ end
         end
 
         # Prepare for next iteration
-        for i in 1:101
+        @inbounds @simd for i in 1:101
             fn_X[i] = X[i]
             fn_Y[i] = Y[i]
         end
