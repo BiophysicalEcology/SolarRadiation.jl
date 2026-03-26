@@ -5,6 +5,7 @@ using ModelParameters
 using SpecialFunctions, StaticArrays, Dates
 
 export SolarProblem, SolarTerrain
+export NoScattering, DaveFurukawa, ChandrasekharScattering
 
 export scattered_radiation
 export elevation_correction
