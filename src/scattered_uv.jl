@@ -642,10 +642,10 @@ end
             # The most performance-intensive code of the package: loop inside loop inside while, called from another loop
             # Possibly there is a faster algorithm?
             # works marginally better when each line is separate
-            @simd for j in 1:101
+            for j in 1:101
                 X_d_values[j] = Ψ[j] * (fnx_i * fn_X[j] - fny_i * fn_Y[j]) / (amu_i + μ[j])
             end
-            @simd for j in 1:101
+            for j in 1:101
                 X_e_values[j] = Ψ[j] * (fny_i * fn_X[j] - fnx_i * fn_Y[j]) / (amu_i - μ[j])
             end
             #######################################################################################################
@@ -666,7 +666,7 @@ end
             # is a huge performance gain
             sxd = 0.0
             sxe = 0.0
-            @simd for ic in 1:101
+            for ic in 1:101
                 sxd += quad_weights_Xa[ic] * X_d_values[ic]
                 sxe += quad_weights_Xa[ic] * X_e_values[ic]
             end
@@ -677,7 +677,7 @@ end
         end
 
         # Correction to X and Y
-        @inbounds @simd for i in 1:101
+        @inbounds for i in 1:101
             temp_d = temp_c * μ[i] * (1.0 - quad_weights_Xb[i])
             X[i] = X_approx[i] + temp_d
             Y[i] = Y_approx[i] + temp_d
@@ -696,7 +696,7 @@ end
         end
 
         # Prepare for next iteration
-        @inbounds @simd for i in 1:101
+        @inbounds for i in 1:101
             fn_X[i] = X[i]
             fn_Y[i] = Y[i]
         end
