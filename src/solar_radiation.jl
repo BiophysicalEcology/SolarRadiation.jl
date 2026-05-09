@@ -304,9 +304,12 @@ Returns `(; tanδ_tanϕ, H₊, H₋)`:
 - `H₋`: Hour angle at sunrise (hours)
 """
 function sunrise_hour_angle(δ, ϕ)
-    # `δ` is plain Float64 in radians (from `acos`); `ϕ` may be a Quantity{°}.
-    # ustrip-ing into pure Float64 avoids the per-call Unitful runtime
-    # conversion that boxes intermediate Float64s.
+    # TODO: this manual ustrip shouldn't be needed — degrees aren't a "real"
+    # unit and `tan(::Quantity{°})` ought to be allocation-free. In practice
+    # it goes through a Unitful conversion path that heap-allocates ~8
+    # intermediate Float64s per call. Worth investigating in Unitful (or
+    # dropping `Quantity{°}` from the SolarTerrain API entirely). Workaround
+    # in the meantime: ustrip ϕ once into Float64 radians.
     ϕ_rad = ustrip(u"°", ϕ) * (π / 180.0)
     tanδ_tanϕ = -tan(δ) * tan(ϕ_rad)
     H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
