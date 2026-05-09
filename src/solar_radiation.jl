@@ -45,14 +45,17 @@ Calculate the effective zenith angle on the terrain surface.
 On flat terrain (slope = 0°) returns the solar zenith angle unchanged.
 On sloped terrain adjusts for slope and aspect using Eq. 3.15 of Sellers (1965).
 """
-function slope_zenith_angle(z, terrain::AbstractTerrain, solar_azimuth)
+@inline function slope_zenith_angle(z, terrain::AbstractTerrain, solar_azimuth)
     if terrain.slope > 0u"°"
         czsl = cos(z) * cos(terrain.slope) + sin(z) * sin(terrain.slope) * cos(solar_azimuth - terrain.aspect)
         zsl = acos(czsl)
         zsl = min(uconvert(u"°", zsl), 90u"°")  # cap at 90° if sun is below slope horizon
     else
         czsl = cos(z)
-        zsl = uconvert(u"°", z * u"rad")
+        # `z` is a plain Float64 in radians (from `acos(cosZ)`); avoid the
+        # `uconvert(u"°", z * u"rad")` round-trip which heap-allocates a
+        # transient Quantity{rad} per call.
+        zsl = (z * (180.0 / π)) * u"°"
     end
     return (; zenith_angle=zsl, cosine_zenith=czsl)
 end
@@ -200,8 +203,18 @@ end
 Look up the horizon angle at a given solar azimuth.
 """
 function horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
-    azi = range(0u"°", stop=360u"°" - 360u"°" / length(horizon_angles), length=length(horizon_angles))
-    return horizon_angles[argmin(abs.(solar_azimuth .- azi))]
+    n = length(horizon_angles)
+    step = 360u"°" / n
+    best_idx = 1
+    best_diff = abs(solar_azimuth - 0u"°")
+    @inbounds for i in 2:n
+        diff = abs(solar_azimuth - (i - 1) * step)
+        if diff < best_diff
+            best_diff = diff
+            best_idx = i
+        end
+    end
+    return @inbounds horizon_angles[best_idx]
 end
 
 """
@@ -233,7 +246,10 @@ function allocate_output_arrays(nsteps, ndays, nmax)
     return (;
         zenith_angle = fill(90.0u"°", nsteps),
         zenith_slope_angle = fill(90.0u"°", nsteps),
-        azimuth_angle = fill!(Vector{Union{Missing,typeof(0.0u"°")}}(undef, nsteps), 90.0u"°"),
+        # 90° is the sun-below-horizon sentinel; using a plain Vector{Quantity{°}}
+        # avoids the Union{Missing,...} boxing that would heap-allocate every
+        # azimuth write inside the per-step loop.
+        azimuth_angle = fill(90.0u"°", nsteps),
         hour_angle_sunrise = fill(0.0, ndays),
         hour_solar_noon = fill(0.0, ndays),
         day_of_year = Vector{Int}(undef, nsteps),
@@ -288,7 +304,14 @@ Returns `(; tanδ_tanϕ, H₊, H₋)`:
 - `H₋`: Hour angle at sunrise (hours)
 """
 function sunrise_hour_angle(δ, ϕ)
-    tanδ_tanϕ = -tan(δ) * tan(ϕ)
+    # TODO: this manual ustrip shouldn't be needed — degrees aren't a "real"
+    # unit and `tan(::Quantity{°})` ought to be allocation-free. In practice
+    # it goes through a Unitful conversion path that heap-allocates ~8
+    # intermediate Float64s per call. Worth investigating in Unitful (or
+    # dropping `Quantity{°}` from the SolarTerrain API entirely). Workaround
+    # in the meantime: ustrip ϕ once into Float64 radians.
+    ϕ_rad = ustrip(u"°", ϕ) * (π / 180.0)
+    tanδ_tanϕ = -tan(δ) * tan(ϕ_rad)
     H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
     H₋ = 12.0 * H₊ / π
     return (; tanδ_tanϕ, H₊, H₋)
@@ -385,7 +408,10 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             H₋ = sunrise.H₋
             sun_up = is_sun_up(t - tsn, H₋)
 
-            solar_azimuth = missing
+            # 90° = sun-below-horizon sentinel (matches the Vector pre-fill);
+            # avoids `Union{Missing, Quantity{°}}` typing of `solar_azimuth`
+            # which would force boxing through the slope_zenith_angle call below.
+            solar_azimuth = 90.0u"°"
             if sun_up || sunrise.tanδ_tanϕ == 1
                 alt = (π / 2 - z)u"rad"
                 solar_azimuth = solar_azimuth_angle(h, ϕ, δ)

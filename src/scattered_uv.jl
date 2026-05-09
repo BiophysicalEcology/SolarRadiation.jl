@@ -10,6 +10,8 @@ function allocate_scattered_radiation()
         quad_weights  = zeros(101),
         γᵣ = zeros(101),
         γₗ = zeros(101),
+        # Pre-allocated auxiliary_terms scratch (overwritten each call to scattered_radiation!).
+        auxiliary_terms = MVector{30,Float64}(undef),
         chandrasekhar_XY_buffers = init_chandrasekhar_XY_buffers(),
     )
 end
@@ -19,9 +21,7 @@ scattered_radiation(τ::Float64) = scattered_radiation!(allocate_scattered_radia
 function scattered_radiation!(buffers, τ::Float64)
     # Large arrays (mutable, normal)
     (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, chandrasekhar_XY_buffers) = buffers
-
-    # Small fixed-size arrays (use StaticArrays)
-    AI  = @MVector zeros(30)
+    AI = buffers.auxiliary_terms  # short alias for the math below
 
     # Set up μ array
     μ[1] = 0.0
@@ -84,7 +84,7 @@ function scattered_radiation!(buffers, τ::Float64)
         xb8 += term4 * μ3
     end
 
-    # Fill AI vector
+    # Fill AI (auxiliary terms) vector
     AI[1]  = xb1 + xb5 - 8.0 / 3.0
     AI[2]  = xb2 + xb6
     AI[3]  = xb3 + xb7
@@ -155,6 +155,15 @@ function init_chandrasekhar_XY_buffers()
         Y_approx = zeros(101),
         X = zeros(101),
         Y = zeros(101),
+        # Small fixed-size scratch buffers — these are re-overwritten on every
+        # call. Hoisting them out of the hot path avoids ~6 MVector allocations
+        # per `chandrasekhar_xy!` invocation.
+        μ_roots = MVector{5,Float64}(undef),
+        cap_a_coeffs = MVector{5,Float64}(undef),
+        temp_X = MVector{8,Float64}(undef),
+        temp_Y = MVector{8,Float64}(undef),
+        k_roots = MVector{5,Float64}(undef),
+        λ = MVector{5,Float64}(undef),
     )
     return arrays
 end
@@ -220,12 +229,13 @@ function chandrasekhar_xy!(buffers, τ::Float64, characteristic_function_coeffs:
     μ   = buffers.μ
     quad_weights_Xa    = buffers.quad_weights_Xa
     quad_weights_Xb    = buffers.quad_weights_Xb
-    μ_roots  = @MVector zeros(5)
-    cap_a_coeffs = @MVector zeros(5)
-    temp_X = @MVector zeros(8)
-    temp_Y = @MVector zeros(8)
-    k_roots  = @MVector zeros(5)
-    λ = @MVector zeros(5)
+    # Pre-allocated MVector scratch (overwritten in full each call).
+    μ_roots  = buffers.μ_roots
+    cap_a_coeffs = buffers.cap_a_coeffs
+    temp_X = buffers.temp_X
+    temp_Y = buffers.temp_Y
+    k_roots  = buffers.k_roots
+    λ = buffers.λ
     fn_plus_p  = buffers.fn_plus_p
     fn_plus_n  = buffers.fn_plus_n
     fn_c0  = buffers.fn_c0
