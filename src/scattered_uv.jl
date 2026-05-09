@@ -10,8 +10,8 @@ function allocate_scattered_radiation()
         quad_weights  = zeros(101),
         γᵣ = zeros(101),
         γₗ = zeros(101),
-        # Pre-allocated AI scratch (overwritten each call to scattered_radiation!).
-        AI = MVector{30,Float64}(undef),
+        # Pre-allocated auxiliary_terms scratch (overwritten each call to scattered_radiation!).
+        auxiliary_terms = MVector{30,Float64}(undef),
         chandrasekhar_XY_buffers = init_chandrasekhar_XY_buffers(),
     )
 end
@@ -20,7 +20,8 @@ scattered_radiation(τ::Float64) = scattered_radiation!(allocate_scattered_radia
 
 function scattered_radiation!(buffers, τ::Float64)
     # Large arrays (mutable, normal)
-    (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, AI, chandrasekhar_XY_buffers) = buffers
+    (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, chandrasekhar_XY_buffers) = buffers
+    AI = buffers.auxiliary_terms  # short alias for the math below
 
     # Set up μ array
     μ[1] = 0.0
@@ -83,7 +84,7 @@ function scattered_radiation!(buffers, τ::Float64)
         xb8 += term4 * μ3
     end
 
-    # Fill AI vector
+    # Fill AI (auxiliary terms) vector
     AI[1]  = xb1 + xb5 - 8.0 / 3.0
     AI[2]  = xb2 + xb6
     AI[3]  = xb3 + xb7
