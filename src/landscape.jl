@@ -47,6 +47,45 @@ end
 abstract type AbstractSolarRadiation end
 
 """
+    SpectralParams
+
+Per-timestep parameters for spectral irradiance computation.
+
+Bundles model constants, terrain properties, and per-step solar geometry
+into a single object passed to `compute_spectral_irradiance!` and `diffuse_irradiance`.
+"""
+struct SpectralParams{
+    DM<:AbstractDiffuseModel,
+    Tp,Tmr,Ttr,Tto,Tta,Ttw,
+    Tsl,Tl,Tar,Tcz,Tmz,
+    Tod,Tch,Tef,Ta,Tz,
+    Tfd,Tfq,Ts
+}
+    nmax::Int
+    P::Tp
+    MR₀::Tmr
+    τR::Ttr
+    τO::Tto
+    τA::Tta
+    τW::Ttw
+    Sλ::Tsl
+    λ::Tl
+    ar²::Tar
+    cz::Tcz
+    intcz::Int
+    m_Zₐ::Tmz
+    ozone_depth::Tod
+    cmH2O::Tch
+    elevation_factors::Tef
+    diffuse_model::DM
+    A::Ta
+    z::Tz
+    FD::Tfd
+    FDQ::Tfq
+    s̄::Ts
+end
+
+"""
     SolarProblem
 
 Solar radiation model parameters.

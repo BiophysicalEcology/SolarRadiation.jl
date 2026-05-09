@@ -123,29 +123,31 @@ function ozone_depth_lookup(latitude, day_of_year, year, ozone_column)
 end
 
 """
-    diffuse_irradiance(diffuse_model, n, λτR, buffers, cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
+    diffuse_irradiance(diffuse_model, n, λτR, params::SpectralParams, buffers)
 
 Calculate diffuse (scattered) spectral irradiance for a single wavelength.
 Dispatches on `diffuse_model` to select the scattering algorithm.
 """
-diffuse_irradiance(::NoScattering, args...) = 0.0u"W/m^2/nm"
+diffuse_irradiance(::NoScattering, n, λτR, params, buffers) = 0.0u"W/m^2/nm"
 
-function diffuse_irradiance(::DaveFurukawaScattering, n, λτR, buffers, cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
+function diffuse_irradiance(::DaveFurukawaScattering, n, λτR, params, buffers)
     # Dave & Furukawa lookup table method (UV wavelengths only)
     n > 11 && return 0.0u"W/m^2/nm"
+    (; ar², A, z, Sλ, FD, FDQ, s̄) = params
     B = ustrip(u"°", z) / 5
     k = trunc(Int, B) + 1 + (B % 1 > 0.5)
-    Q = albedo / (1.0 - albedo * s̄[n])  # eq. 31 in Dave & Furukawa 1966
-    Dλ = (Sλ_n / π) * (FD[n, k] + FDQ[n, k] * Q) / 1000.0
+    Q = A / (1.0 - A * s̄[n])  # eq. 31 in Dave & Furukawa 1966
+    Dλ = (Sλ[n] / π) * (FD[n, k] + FDQ[n, k] * Q) / 1000.0
     return Dλ * ar²
 end
 
-function diffuse_irradiance(::ChandrasekharScattering, n, λτR, buffers, cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
+function diffuse_irradiance(::ChandrasekharScattering, n, λτR, params, buffers)
     # Full Chandrasekhar scattering model (eq. 15 McCullough & Porter 1971)
     λτR < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
+    (; cz, intcz, Sλ, ar², m_Zₐ, A) = params
     γᵣ, γₗ, s̄_scalar = scattered_radiation!(buffers.gamma, λτR)
-    I₀_λ = cz * Sλ_n * ar² / 1000.0
-    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - albedo * float(s̄_scalar))))
+    I₀_λ = cz * Sλ[n] * ar² / 1000.0
+    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄_scalar))))
             - exp(-float(λτR) * m_Zₐ)) * I₀_λ
 end
 
@@ -299,10 +301,10 @@ Compute spectral irradiance for all wavelengths at a single timestep.
 
 Modifies `buffers` in place with computed spectral values.
 """
-function compute_spectral_irradiance!(buffers, params, sun_below_horizon)
+function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below_horizon)
     (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ) = buffers
-    (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-       ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z, FD, FDQ, s̄) = params
+    (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, m_Zₐ,
+       ozone_depth, cmH2O, elevation_factors, diffuse_model) = params
     (; molecular, aerosol, ozone, water) = elevation_factors
 
     for n in 1:nmax
@@ -318,8 +320,7 @@ function compute_spectral_irradiance!(buffers, params, sun_below_horizon)
             Iᵣλ[n] = MIN_IRRADIANCE * u"W/m^2/nm"
         end
 
-        Dλ[n] = diffuse_irradiance(diffuse_model, n, τ.rayleigh, buffers,
-                                   cz, intcz, Sλ[n], ar², m_Zₐ, A, z, FD, FDQ, s̄)
+        Dλ[n] = diffuse_irradiance(diffuse_model, n, τ.rayleigh, params, buffers)
         Gλ[n] = Dλ[n] + Iλ[n]
 
         trapezoidal_integrate!(∫I, ∫Iᵣ, ∫D, ∫G, Iλ, Iᵣλ, Dλ, Gλ, λ, n)
@@ -402,8 +403,10 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
                 ozone_depth = ozone_depth_lookup(ϕ, d, year, ozone_column)
 
                 # Compute spectral irradiance
-                params = (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-                           ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z, FD, FDQ, s̄)
+                params = SpectralParams(
+                    nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
+                    ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z, FD, FDQ, s̄
+                )
                 compute_spectral_irradiance!(buffers, params, alt < ahoriz)
 
                 # Store results
