@@ -27,7 +27,7 @@ elevation = (solarinput[:elev])*1.0u"m"
 horizon_angles = (DataFrame(CSV.File("$testdir/data/horizon.csv"))[:, 2])*1.0u"°"
 albedo = solarinput[:REFL]*1.0
 atmospheric_pressure = solarinput[:P_atmos]*1.0u"Pa"
-scattered_uv = Bool(Int(solarinput[:IUV]))
+diffuse_model = Bool(Int(solarinput[:IUV])) ? ChandrasekharScattering() : DaveFurukawaScattering()
 latitude = solarinput[:lat]*1.0u"°"
 longitude = solarinput[:lon]*1.0u"°"
 #τA_nmr = (DataFrame(CSV.File("$testdir/data/TAI.csv"))[:, 2]*1.0)
@@ -35,7 +35,7 @@ longitude = solarinput[:lon]*1.0u"°"
 hours = collect(0.0:1:23.0)
 days = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]*1.0
 
-solar_model = SolarProblem(; scattered_uv = scattered_uv)
+solar_model = SolarProblem(; diffuse_model)
 
 solar_terrain = SolarTerrain(;
     horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure, latitude, longitude

@@ -1,5 +1,38 @@
+abstract type AbstractDiffuseModel end
+
+"""
+    NoScattering <: AbstractDiffuseModel
+
+Disables all diffuse (scattered) radiation. Equivalent to `scattered=false` in the original
+McCullough & Porter (1971) model.
+"""
+struct NoScattering <: AbstractDiffuseModel end
+
+"""
+    DaveFurukawaScattering <: AbstractDiffuseModel
+
+Diffuse UV irradiance from pre-tabulated lookup tables (Dave & Furukawa 1966).
+Only applies to the first 11 wavelength intervals (UV range, < ~380 nm).
+This is the default diffuse model.
+"""
+struct DaveFurukawaScattering <: AbstractDiffuseModel end
+
+"""
+    ChandrasekharScattering <: AbstractDiffuseModel
+
+Full diffuse irradiance using Chandrasekhar's iterative X and Y functions.
+Applies to all wavelengths. More accurate but significantly more expensive than
+`DaveFurukawaScattering`. Equivalent to `scattered_uv=true` in the original model.
+"""
+struct ChandrasekharScattering <: AbstractDiffuseModel end
+
 abstract type AbstractTerrain end
 
+"""
+    SolarTerrain
+
+Terrain configuration for solar radiation computation.
+"""
 @kwdef struct SolarTerrain{E,HA,S,As,Al,AP,La,Lo} <: AbstractTerrain
     elevation::E
     horizon_angles::HA
@@ -9,9 +42,48 @@ abstract type AbstractTerrain end
     atmospheric_pressure::AP
     latitude::La
     longitude::Lo
- end
+end
 
- abstract type AbstractSolarRadiation end
+abstract type AbstractSolarRadiation end
+
+"""
+    SpectralParams
+
+Per-timestep parameters for spectral irradiance computation.
+
+Bundles model constants, terrain properties, and per-step solar geometry
+into a single object passed to `compute_spectral_irradiance!` and `diffuse_irradiance`.
+"""
+struct SpectralParams{
+    DM<:AbstractDiffuseModel,
+    Tp,Tmr,Ttr,Tto,Tta,Ttw,
+    Tsl,Tl,Tar,Tcz,Tmz,
+    Tod,Tch,Tef,Ta,Tz,
+    Tfd,Tfq,Ts
+}
+    nmax::Int
+    P::Tp
+    MR₀::Tmr
+    τR::Ttr
+    τO::Tto
+    τA::Tta
+    τW::Ttw
+    Sλ::Tsl
+    λ::Tl
+    ar²::Tar
+    cz::Tcz
+    intcz::Int
+    m_Zₐ::Tmz
+    ozone_depth::Tod
+    cmH2O::Tch
+    elevation_factors::Tef
+    diffuse_model::DM
+    A::Ta
+    z::Tz
+    FD::Tfd
+    FDQ::Tfq
+    s̄::Ts
+end
 
 """
     SolarProblem
@@ -21,8 +93,10 @@ Solar radiation model parameters.
 # Keyword Arguments
 
 - `precipitable_water::Real=1`: Precipitable water in cm for atmospheric column (e.g. 0.1: dry, 1.0: moist, 2.0: humid).
-- `scattered_uv::Bool=false`: If `true`, uses the full scattered_uv model for diffuse radiation (expensive).
-- `scattered::Bool=true`: If `false`, disables scattered light computations (faster).
+- `diffuse_model::AbstractDiffuseModel=DaveFurukawaScattering()`: Diffuse radiation algorithm. Options:
+  - `DaveFurukawaScattering()` (default): lookup-table method for UV wavelengths only (Dave & Furukawa 1966).
+  - `ChandrasekharScattering()`: full iterative X/Y function method, all wavelengths (expensive).
+  - `NoScattering()`: disables all diffuse radiation.
 - `mixing_ratio_height::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
 - `wavelength_count::Integer=111`: Maximum number of wavelength intervals.
 - `wavelengths::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
@@ -33,8 +107,9 @@ Solar radiation model parameters.
     rescattered downward as a function of wavelength, from tables in Dave & Furukawa (1966).
 - `single_scattering_albedo`: Molecular scattering function in the UV range (< 360 nm).
 """
-@kwdef struct SolarProblem{SGM,PW,SUV,SC,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI,DSI,DGR,SSA} <: AbstractSolarRadiation
+@kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,SUV,SC,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI,DSI,DGR,SSA} <: AbstractSolarRadiation
     solar_geometry_model::SGM = McCulloughPorterSolarGeometry()
+    diffuse_model::DM = DaveFurukawaScattering()
     precipitable_water::PW = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
     scattered_uv::SUV = false # if `true` uses the full scattered_uv model for diffuse radiation (expensive)
     scattered::SC = true # if `false` disables scattered light computations (faster)
