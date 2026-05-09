@@ -107,20 +107,22 @@ Solar radiation model parameters.
     rescattered downward as a function of wavelength, from tables in Dave & Furukawa (1966).
 - `single_scattering_albedo`: Molecular scattering function in the UV range (< 360 nm).
 """
-@kwdef struct SolarProblem <: AbstractSolarRadiation
-    solar_geometry_model = McCulloughPorterSolarGeometry()
-    precipitable_water = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
-    diffuse_model::AbstractDiffuseModel = DaveFurukawaScattering()
-    mixing_ratio_height = 25.0u"km" # mixing ratio height of the atmosphere
-    wavelength_count = 111 # Maximum number of wavelength intervals
-    wavelengths = DEFAULT_WAVELENGTHS # Vector of wavelength bins (e.g. in `nm`)
-    ozone_column = DEFAULT_OZONE_COLUMN # ozone column depth table indexed by latitude band and month (size 19×12)
-    rayleigh_optical_depth = DEFAULT_RAYLEIGH_OPTICAL_DEPTH # vector of optical depths per wavelength for Rayleigh scattering
-    ozone_optical_depth = DEFAULT_OZONE_OPTICAL_DEPTH # vector of optical depths per wavelength for ozone
-    aerosol_optical_depth = DEFAULT_AEROSOL_OPTICAL_DEPTH # vector of optical depths per wavelength for aerosols
-    water_optical_depth = DEFAULT_WATER_OPTICAL_DEPTH # vector of optical depths per wavelength for water vapor
-    solar_spectral_irradiance = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
-    diffuse_sky_irradiance = DEFAULT_DIFFUSE_SKY_IRRADIANCE # interpolated function of radiation scattered from the direct solar beam
-    diffuse_ground_reflected = DEFAULT_DIFFUSE_GROUND_REFLECTED # interpolated function of radiation scattered from ground-reflected radiation
-    single_scattering_albedo = DEFAULT_SINGLE_SCATTERING_ALBEDO # a function of τR linked to molecular scattering in the UV range (< 360 nm)
+@kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,SUV,SC,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI,DSI,DGR,SSA} <: AbstractSolarRadiation
+    solar_geometry_model::SGM = McCulloughPorterSolarGeometry()
+    diffuse_model::DM = DaveFurukawaScattering()
+    precipitable_water::PW = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
+    scattered_uv::SUV = false # if `true` uses the full scattered_uv model for diffuse radiation (expensive)
+    scattered::SC = true # if `false` disables scattered light computations (faster)
+    mixing_ratio_height::MRH = 25.0u"km" # mixing ratio height of the atmosphere
+    wavelength_count::WC = 111 # Maximum number of wavelength intervals
+    wavelengths::WL = DEFAULT_WAVELENGTHS # Vector of wavelength bins (e.g. in `nm`)
+    ozone_column::OC = DEFAULT_OZONE_COLUMN # ozone column depth table indexed by latitude band and month (size 19×12)
+    rayleigh_optical_depth::ROD = DEFAULT_RAYLEIGH_OPTICAL_DEPTH # vector of optical depths per wavelength for Rayleigh scattering
+    ozone_optical_depth::OOD = DEFAULT_OZONE_OPTICAL_DEPTH # vector of optical depths per wavelength for ozone
+    aerosol_optical_depth::AOD = DEFAULT_AEROSOL_OPTICAL_DEPTH # vector of optical depths per wavelength for aerosols
+    water_optical_depth::WOD = DEFAULT_WATER_OPTICAL_DEPTH # vector of optical depths per wavelength for water vapor
+    solar_spectral_irradiance::SSI = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
+    diffuse_sky_irradiance::DSI = DEFAULT_DIFFUSE_SKY_IRRADIANCE # interpolated function of radiation scattered from the direct solar beam
+    diffuse_ground_reflected::DGR = DEFAULT_DIFFUSE_GROUND_REFLECTED # interpolated function of radiation scattered from ground-reflected radiation
+    single_scattering_albedo::SSA = DEFAULT_SINGLE_SCATTERING_ALBEDO # a function of τR linked to molecular scattering in the UV range (< 360 nm)
 end

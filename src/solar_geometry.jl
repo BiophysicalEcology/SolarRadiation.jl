@@ -33,11 +33,11 @@ Solar geometry model based on McCullough & Porter (1971).
 - `orbital_eccentricity`: Earth's orbital eccentricity (default: 0.0167238)
 - `declination_amplitude`: Solar declination amplitude (default: 0.39784993)
 """
-@kwdef struct McCulloughPorterSolarGeometry <: AbstractSolarGeometryModel
-    reference_day::Real = 80
-    orbital_angular_frequency::Real = 2π / 365
-    orbital_eccentricity::Real = 0.0167238
-    declination_amplitude::Real = 0.39784993
+@kwdef struct McCulloughPorterSolarGeometry{RD,OAF,OE,DA} <: AbstractSolarGeometryModel
+    reference_day::RD = 80
+    orbital_angular_frequency::OAF = 2π / 365
+    orbital_eccentricity::OE = 0.0167238
+    declination_amplitude::DA = 0.39784993
 end
 
 """
