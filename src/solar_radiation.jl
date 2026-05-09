@@ -54,7 +54,7 @@ function slope_zenith_angle(z, slope, solar_azimuth, aspect)
         zsl = min(uconvert(u"°", zsl), 90u"°")  # cap at 90° if sun is below slope horizon
     else
         czsl = cos(z)
-        zsl = z
+        zsl = uconvert(u"°", z * u"rad")
     end
     return (; zenith_angle=zsl, cosine_zenith=czsl)
 end
@@ -254,7 +254,7 @@ function allocate_output_arrays(nsteps, ndays, nmax)
         hour_angle_sunrise = fill(0.0, ndays),
         hour_solar_noon = fill(0.0, ndays),
         day_of_year = Vector{Int}(undef, nsteps),
-        hour = Vector{Real}(undef, nsteps),
+        hour = Vector{Float64}(undef, nsteps),
         rayleigh_horizontal = fill(0.0u"W/m^2", nsteps),
         direct_horizontal = fill(0.0u"W/m^2", nsteps),
         diffuse_horizontal = fill(0.0u"W/m^2", nsteps),
