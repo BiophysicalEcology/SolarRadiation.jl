@@ -44,10 +44,10 @@ Solar geometry model based on McCullough & Porter (1971).
 Note: `orbital_angular_frequency` is now computed dynamically based on the year length
 to handle leap years and non-standard calendars. Use `orbital_angular_frequency(days_in_year)`.
 """
-@kwdef struct McCulloughPorterSolarGeometry <: AbstractSolarGeometryModel
-    reference_day::Real = 80
-    orbital_eccentricity::Real = 0.0167238
-    declination_amplitude::Real = 0.39784993
+@kwdef struct McCulloughPorterSolarGeometry{RD,OE,DA} <: AbstractSolarGeometryModel
+    reference_day::RD = 80
+    orbital_eccentricity::OE = 0.0167238
+    declination_amplitude::DA = 0.39784993
 end
 
 """
@@ -117,11 +117,13 @@ function solar_azimuth_angle(hour_angle, latitude, declination)
     h, ϕ, δ = hour_angle, latitude, declination
 
     tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
-    azimuth = atan(tan_azimuth) * sign(latitude)
+    azimuth = atan(tan_azimuth)
 
     # Correct for hemisphere/quadrant
     azimuth = if h == 0.0 # Special case: solar noon
-        180.0u"°"
+        # Sun is south when observer is poleward of sub-solar point (denominator < 0
+        # at h=0), north otherwise.
+        (cos(ϕ) * tan(δ) - sin(ϕ)) < 0 ? 180.0u"°" : 0.0u"°"
     elseif h <= 0.0 # Morning - east of reference
         if azimuth <= 0.0u"°"
             -azimuth  # 1st Quadrant (0–90°)

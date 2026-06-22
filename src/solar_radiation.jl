@@ -38,25 +38,39 @@ function is_sun_up(time_from_noon, sunrise_hour_angle)
 end
 
 """
-    slope_zenith_angle(zenith, slope, solar_azimuth, aspect)
+    slope_zenith_angle(zenith, terrain, solar_azimuth) -> (; zenith_angle, cosine_zenith)
 
-Calculate the effective zenith angle on a sloped surface.
+Calculate the effective zenith angle on the terrain surface.
 
-Based on Eq. 3.15 in Sellers (1965) "Physical Climatology".
-
-# Returns
-NamedTuple with `(; zenith_angle, cosine_zenith)`
+On flat terrain (slope = 0°) returns the solar zenith angle unchanged.
+On sloped terrain adjusts for slope and aspect using Eq. 3.15 of Sellers (1965).
 """
-function slope_zenith_angle(z, slope, solar_azimuth, aspect)
-    if slope > 0u"°"
-        czsl = cos(z) * cos(slope) + sin(z) * sin(slope) * cos(solar_azimuth - aspect)
+@inline function slope_zenith_angle(z, terrain::AbstractTerrain, solar_azimuth)
+    if terrain.slope > 0u"°"
+        czsl = cos(z) * cos(terrain.slope) + sin(z) * sin(terrain.slope) * cos(solar_azimuth - terrain.aspect)
         zsl = acos(czsl)
         zsl = min(uconvert(u"°", zsl), 90u"°")  # cap at 90° if sun is below slope horizon
     else
         czsl = cos(z)
-        zsl = z
+        # `z` is a plain Float64 in radians (from `acos(cosZ)`); avoid the
+        # `uconvert(u"°", z * u"rad")` round-trip which heap-allocates a
+        # transient Quantity{rad} per call.
+        zsl = (z * (180.0 / π)) * u"°"
     end
     return (; zenith_angle=zsl, cosine_zenith=czsl)
+end
+
+"""
+    terrain_irradiance(global_horizontal, cosine_zenith, cosine_slope_zenith, zenith, terrain)
+
+Calculate terrain-adjusted global irradiance.
+
+On flat terrain returns `global_horizontal` unchanged. On sloped terrain, scales
+horizontal irradiance by the ratio of slope to horizontal cosine zenith when the
+sun is above the horizon.
+"""
+function terrain_irradiance(global_h, cz, czsl, z, terrain::AbstractTerrain)
+    terrain.slope > 0u"°" && z < 90.0u"°" ? max(0.0u"W/m^2", (global_h / cz) * czsl) : global_h
 end
 
 """
@@ -112,60 +126,32 @@ function ozone_depth_lookup(latitude, day_of_year, year, ozone_column)
 end
 
 """
-    diffuse_irradiance(wavelength_index, scattered, scattered_uv, λτR, gamma_buffers,
-                       cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
+    diffuse_irradiance(diffuse_model, n, λτR, params::SpectralParams, buffers)
 
 Calculate diffuse (scattered) spectral irradiance for a single wavelength.
-
-# Arguments
-- `wavelength_index`: Index into wavelength array (1-111)
-- `scattered`: If false, disable all scattering
-- `scattered_uv`: If true, use full Chandrasekhar model; otherwise use lookup tables
-- `λτR`: Rayleigh optical depth at this wavelength
-- `gamma_buffers`: Pre-allocated buffers for Chandrasekhar calculation
-- `cz`: Cosine of zenith angle
-- `intcz`: Integer index for zenith (1-101)
-- `Sλ_n`: Solar spectral irradiance at this wavelength
-- `ar²`: Sun distance factor
-- `m_Zₐ`: Optical air mass
-- `albedo`: Surface albedo
-- `z`: Zenith angle
-- `FD`, `FDQ`: Dave & Furukawa lookup tables
-- `s̄`: Single scattering albedo (vector or scalar depending on mode)
-
-# Returns
-Diffuse spectral irradiance in W/m²/nm
+Dispatches on `diffuse_model` to select the scattering algorithm.
 """
-function diffuse_irradiance(n, scattered, scattered_uv, λτR, gamma_buffers,
-                            cz, intcz, Sλ_n, ar², m_Zₐ, albedo, z, FD, FDQ, s̄)
-    if !scattered
-        return 0.0u"W/m^2/nm"
-    end
+diffuse_irradiance(::NoScattering, n, λτR, params, buffers) = 0.0u"W/m^2/nm"
 
-    if scattered_uv
-        # Full Chandrasekhar scattering model
-        if λτR >= MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR
-            γᵣ, γₗ, s̄_scalar = scattered_radiation!(gamma_buffers, λτR)
-            I₀_λ = cz * Sλ_n * ar² / 1000.0
-            # eq. 15 McCullough & Porter 1971
-            return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - albedo * float(s̄_scalar))))
-                    - exp(-float(λτR) * m_Zₐ)) * I₀_λ
-        else
-            return 0.0u"W/m^2/nm"
-        end
-    else
-        # Dave & Furukawa lookup table method (UV wavelengths only)
-        if n > 11
-            return 0.0u"W/m^2/nm"
-        end
-        B = ustrip(u"°", z) / 5
-        k = trunc(Int, B) + 1 + (B % 1 > 0.5)
-        flux_down = FD[n, k]
-        flux_down_div_Q = FDQ[n, k]
-        Q = albedo / (1.0 - albedo * s̄[n])  # eq. 31 in Dave & Furukawa 1966
-        Dλ = (Sλ_n / π) * (flux_down + flux_down_div_Q * Q) / 1000.0
-        return Dλ * ar²
-    end
+function diffuse_irradiance(::DaveFurukawaScattering, n, λτR, params, buffers)
+    # Dave & Furukawa lookup table method (UV wavelengths only)
+    n > 11 && return 0.0u"W/m^2/nm"
+    (; ar², A, z, Sλ, FD, FDQ, s̄) = params
+    B = ustrip(u"°", z) / 5
+    k = trunc(Int, B) + 1 + (B % 1 > 0.5)
+    Q = A / (1.0 - A * s̄[n])  # eq. 31 in Dave & Furukawa 1966
+    Dλ = (Sλ[n] / π) * (FD[n, k] + FDQ[n, k] * Q) / 1000.0
+    return Dλ * ar²
+end
+
+function diffuse_irradiance(::ChandrasekharScattering, n, λτR, params, buffers)
+    # Full Chandrasekhar scattering model (eq. 15 McCullough & Porter 1971)
+    λτR < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
+    (; cz, intcz, Sλ, ar², m_Zₐ, A) = params
+    γᵣ, γₗ, s̄_scalar = scattered_radiation!(buffers.gamma, λτR)
+    I₀_λ = cz * Sλ[n] * ar² / 1000.0
+    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄_scalar))))
+            - exp(-float(λτR) * m_Zₐ)) * I₀_λ
 end
 
 """
@@ -217,8 +203,18 @@ end
 Look up the horizon angle at a given solar azimuth.
 """
 function horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
-    azi = range(0u"°", stop=360u"°" - 360u"°" / length(horizon_angles), length=length(horizon_angles))
-    return horizon_angles[argmin(abs.(solar_azimuth .- azi))]
+    n = length(horizon_angles)
+    step = 360u"°" / n
+    best_idx = 1
+    best_diff = abs(solar_azimuth - 0u"°")
+    @inbounds for i in 2:n
+        diff = abs(solar_azimuth - (i - 1) * step)
+        if diff < best_diff
+            best_diff = diff
+            best_idx = i
+        end
+    end
+    return @inbounds horizon_angles[best_idx]
 end
 
 """
@@ -250,11 +246,14 @@ function allocate_output_arrays(nsteps, ndays, nmax)
     return (;
         zenith_angle = fill(90.0u"°", nsteps),
         zenith_slope_angle = fill(90.0u"°", nsteps),
-        azimuth_angle = fill!(Vector{Union{Missing,typeof(0.0u"°")}}(undef, nsteps), 90.0u"°"),
+        # 90° is the sun-below-horizon sentinel; using a plain Vector{Quantity{°}}
+        # avoids the Union{Missing,...} boxing that would heap-allocate every
+        # azimuth write inside the per-step loop.
+        azimuth_angle = fill(90.0u"°", nsteps),
         hour_angle_sunrise = fill(0.0, ndays),
         hour_solar_noon = fill(0.0, ndays),
         day_of_year = Vector{Int}(undef, nsteps),
-        hour = Vector{Real}(undef, nsteps),
+        hour = Vector{Float64}(undef, nsteps),
         rayleigh_horizontal = fill(0.0u"W/m^2", nsteps),
         direct_horizontal = fill(0.0u"W/m^2", nsteps),
         diffuse_horizontal = fill(0.0u"W/m^2", nsteps),
@@ -268,14 +267,15 @@ function allocate_output_arrays(nsteps, ndays, nmax)
 end
 
 """
-    allocate_buffers(nmax)
+    allocate_buffers(nmax, diffuse_model)
 
 Allocate working buffers for solar radiation computation.
 
-Returns a NamedTuple containing spectral integration arrays and
-Chandrasekhar scattering buffers for reuse across multiple calls to `solar_radiation!`.
+Returns a NamedTuple containing spectral integration arrays for reuse across multiple
+calls to `solar_radiation!`. `ChandrasekharScattering` additionally allocates iterative
+solver buffers in a `gamma` field.
 """
-function allocate_buffers(nmax)
+function allocate_buffers(nmax, ::AbstractDiffuseModel)
     ∫G = fill(0.0u"W/m^2", nmax)
     ∫Iᵣ = fill(0.0u"W/m^2", nmax)
     ∫I = fill(0.0u"W/m^2", nmax)
@@ -284,8 +284,13 @@ function allocate_buffers(nmax)
     Iᵣλ = ∫G * u"1/nm"
     Iλ = ∫G * u"1/nm"
     Dλ = ∫G * u"1/nm"
+    return (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ)
+end
+
+function allocate_buffers(nmax, ::ChandrasekharScattering)
+    base = allocate_buffers(nmax, DaveFurukawaScattering())
     gamma = allocate_scattered_radiation()
-    return (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ, gamma)
+    return (; base..., gamma)
 end
 
 """
@@ -299,7 +304,14 @@ Returns `(; tanδ_tanϕ, H₊, H₋)`:
 - `H₋`: Hour angle at sunrise (hours)
 """
 function sunrise_hour_angle(δ, ϕ)
-    tanδ_tanϕ = -tan(δ) * tan(ϕ)
+    # TODO: this manual ustrip shouldn't be needed — degrees aren't a "real"
+    # unit and `tan(::Quantity{°})` ought to be allocation-free. In practice
+    # it goes through a Unitful conversion path that heap-allocates ~8
+    # intermediate Float64s per call. Worth investigating in Unitful (or
+    # dropping `Quantity{°}` from the SolarTerrain API entirely). Workaround
+    # in the meantime: ustrip ϕ once into Float64 radians.
+    ϕ_rad = ustrip(u"°", ϕ) * (π / 180.0)
+    tanδ_tanϕ = -tan(δ) * tan(ϕ_rad)
     H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
     H₋ = 12.0 * H₊ / π
     return (; tanδ_tanϕ, H₊, H₋)
@@ -312,11 +324,10 @@ Compute spectral irradiance for all wavelengths at a single timestep.
 
 Modifies `buffers` in place with computed spectral values.
 """
-function compute_spectral_irradiance!(buffers, params, sun_below_horizon)
+function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below_horizon)
     (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ) = buffers
-    (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-       ozone_depth, cmH2O, elevation_factors, scattered, scattered_uv,
-       gamma_buffers, A, z, FD, FDQ, s̄) = params
+    (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, m_Zₐ,
+       ozone_depth, cmH2O, elevation_factors, diffuse_model) = params
     (; molecular, aerosol, ozone, water) = elevation_factors
 
     for n in 1:nmax
@@ -332,8 +343,7 @@ function compute_spectral_irradiance!(buffers, params, sun_below_horizon)
             Iᵣλ[n] = MIN_IRRADIANCE * u"W/m^2/nm"
         end
 
-        Dλ[n] = diffuse_irradiance(n, scattered, scattered_uv, τ.rayleigh, gamma_buffers,
-                                   cz, intcz, Sλ[n], ar², m_Zₐ, A, z, FD, FDQ, s̄)
+        Dλ[n] = diffuse_irradiance(diffuse_model, n, τ.rayleigh, params, buffers)
         Gλ[n] = Dλ[n] + Iλ[n]
 
         trapezoidal_integrate!(∫I, ∫Iᵣ, ∫D, ∫G, Iλ, Iᵣλ, Dλ, Gλ, λ, n)
@@ -350,8 +360,8 @@ for reuse across multiple calls.
 
 See `solar_radiation` for argument documentation.
 """
-function solar_radiation!(out, buffers, solar_model::SolarProblem;
-    solar_terrain::SolarTerrain,
+function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
+    solar_terrain::AbstractTerrain,
     days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
     year::Real=1975,
     hours::AbstractVector{<:Real}=0:1:23,
@@ -359,7 +369,7 @@ function solar_radiation!(out, buffers, solar_model::SolarProblem;
     days_in_year::Real=365,
 )
     # Unpack model parameters with short aliases for equations
-    (; solar_geometry_model, precipitable_water, scattered_uv, scattered, mixing_ratio_height,
+    (; solar_geometry_model, precipitable_water, diffuse_model, mixing_ratio_height,
        wavelength_count, wavelengths, ozone_column, rayleigh_optical_depth, ozone_optical_depth,
        aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance,
        diffuse_sky_irradiance, diffuse_ground_reflected, single_scattering_albedo) = solar_model
@@ -369,15 +379,11 @@ function solar_radiation!(out, buffers, solar_model::SolarProblem;
     cmH2O, MR₀ = precipitable_water, mixing_ratio_height
 
     # Unpack terrain
-    (; horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure, latitude) = solar_terrain
+    (; elevation, albedo, atmospheric_pressure, latitude) = solar_terrain
     ϕ, P, A = latitude, atmospheric_pressure, albedo
 
     ndays, ntimes = length(days), length(hours)
     elevation_factors = elevation_correction(elevation)
-
-    (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ, gamma) = buffers
-    gamma_buffers = gamma
-
     step = 1
     H₋, tsn = 0.0, 0.0
 
@@ -392,8 +398,10 @@ function solar_radiation!(out, buffers, solar_model::SolarProblem;
             # Twilight handling
             skylight = twilight_irradiance(z)
             if skylight !== nothing
-                ∫D[nmax], ∫G[nmax] = skylight, skylight
-                out.global_horizontal[step], out.diffuse_horizontal[step] = skylight, skylight
+                buffers.∫D[nmax] = skylight
+                buffers.∫G[nmax] = skylight
+                out.global_horizontal[step] = skylight
+                out.diffuse_horizontal[step] = skylight
             end
 
             # Sunrise/sunset calculation
@@ -401,14 +409,17 @@ function solar_radiation!(out, buffers, solar_model::SolarProblem;
             H₋ = sunrise.H₋
             sun_up = is_sun_up(t - tsn, H₋)
 
-            solar_azimuth = missing
+            # 90° = sun-below-horizon sentinel (matches the Vector pre-fill);
+            # avoids `Union{Missing, Quantity{°}}` typing of `solar_azimuth`
+            # which would force boxing through the slope_zenith_angle call below.
+            solar_azimuth = 90.0u"°"
             if sun_up || sunrise.tanδ_tanϕ == 1
                 alt = (π / 2 - z)u"rad"
                 solar_azimuth = solar_azimuth_angle(h, ϕ, δ)
-                ahoriz = horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
+                ahoriz = horizon_angle_at_azimuth(solar_azimuth, solar_terrain.horizon_angles)
 
                 # Slope geometry
-                slope_geom = slope_zenith_angle(z, slope, solar_azimuth, aspect)
+                slope_geom = slope_zenith_angle(z, solar_terrain, solar_azimuth)
                 zsl, czsl = slope_geom.zenith_angle, slope_geom.cosine_zenith
 
                 # Refraction correction
@@ -419,18 +430,21 @@ function solar_radiation!(out, buffers, solar_model::SolarProblem;
                 ozone_depth = ozone_depth_lookup(ϕ, d, year, ozone_column)
 
                 # Compute spectral irradiance
-                params = (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-                           ozone_depth, cmH2O, elevation_factors, scattered, scattered_uv,
-                           gamma_buffers, A, z, FD, FDQ, s̄)
+                params = SpectralParams(
+                    nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
+                    ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z, FD, FDQ, s̄
+                )
                 compute_spectral_irradiance!(buffers, params, alt < ahoriz)
 
                 # Store results
+                (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ) = buffers
+
                 out.global_spectra[step, :] .= Gλ
                 out.rayleigh_spectra[step, :] .= Iᵣλ
                 out.direct_spectra[step, :] .= Iλ
                 out.diffuse_spectra[step, :] .= Dλ
                 out.global_horizontal[step] = ∫G[nmax]
-                out.global_terrain[step] = (slope > 0.0 && z < 90.0u"°") ? max(0.0u"W/m^2", (out.global_horizontal[step] / cz) * czsl) : out.global_horizontal[step]
+                out.global_terrain[step] = terrain_irradiance(∫G[nmax], cz, czsl, z, solar_terrain)
                 out.rayleigh_horizontal[step] = ∫Iᵣ[nmax]
                 out.direct_horizontal[step] = ∫I[nmax]
                 out.diffuse_horizontal[step] = ∫D[nmax]
@@ -458,6 +472,10 @@ Compute solar radiation for a given model and terrain configuration.
 
 Allocates output buffers internally. For repeated calls with the same dimensions,
 use `solar_radiation!` with pre-allocated buffers for better performance.
+
+# Arguments
+- `solar_model::AbstractSolarRadiation`: Solar radiation model parameters
+- `solar_terrain::AbstractTerrain`: Terrain configuration (elevation, slope, etc.)
 
 # Numeric interface (R-compatible)
 - `days`: Vector of days of year (default: mid-month days)
@@ -494,8 +512,8 @@ solar_radiation(model; solar_terrain, dates, hours=Hour(0):Hour(1):Hour(23))
 # Returns
 NamedTuple with zenith/azimuth angles, integrated irradiances, and spectral data.
 """
-function solar_radiation(solar_model::SolarProblem;
-    solar_terrain::SolarTerrain,
+function solar_radiation(solar_model::AbstractSolarRadiation;
+    solar_terrain::AbstractTerrain,
     # Numeric interface
     days::Union{Nothing, AbstractVector{<:Real}}=nothing,
     year::Real=1975,
@@ -530,7 +548,7 @@ function solar_radiation(solar_model::SolarProblem;
     nsteps = ndays * ntimes
 
     out = allocate_output_arrays(nsteps, ndays, nmax)
-    buffers = allocate_buffers(nmax)
+    buffers = allocate_buffers(nmax, solar_model.diffuse_model)
 
     return solar_radiation!(out, buffers, solar_model;
         solar_terrain,

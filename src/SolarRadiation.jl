@@ -4,7 +4,8 @@ using Unitful
 using ModelParameters
 using SpecialFunctions, StaticArrays, Dates
 
-export SolarProblem, SolarTerrain
+export SolarProblem, SolarTerrain, SpectralParams
+export NoScattering, DaveFurukawaScattering, ChandrasekharScattering
 
 export scattered_radiation
 export elevation_correction
