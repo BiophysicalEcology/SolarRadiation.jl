@@ -48,7 +48,7 @@ On sloped terrain adjusts for slope and aspect using Eq. 3.15 of Sellers (1965).
 @inline function slope_zenith_angle(z, terrain::AbstractTerrain, solar_azimuth)
     if terrain.slope > 0u"°"
         czsl = cos(z) * cos(terrain.slope) + sin(z) * sin(terrain.slope) * cos(solar_azimuth - terrain.aspect)
-        zsl = acos(czsl)
+        zsl = acos(clamp(czsl, -1.0, 1.0))  # guard against floating-point overshoot past ±1
         zsl = min(uconvert(u"°", zsl), 90u"°")  # cap at 90° if sun is below slope horizon
     else
         czsl = cos(z)
