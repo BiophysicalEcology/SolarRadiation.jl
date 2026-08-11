@@ -9,7 +9,7 @@ export NoScattering, DaveFurukawaScattering, ChandrasekharScattering
 
 export scattered_radiation
 export elevation_correction
-export solar_geometry, hour_angle
+export solar_geometry, hour_angle, orbital_angular_frequency
 export solar_radiation, solar_radiation!
 export allocate_output_arrays, allocate_buffers
 
