@@ -126,59 +126,48 @@ function ozone_depth_lookup(latitude, day_of_year, year, ozone_column)
 end
 
 """
-    diffuse_irradiance(diffuse_model, n, λτR, params::SpectralParams, buffers)
+    spectral_optical_depth(wavelength_index, atmospheric_pressure, mixing_ratio_height,
+        rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth,
+        elevation_factors, ozone_depth, air_mass, precipitable_water)
 
-Calculate diffuse (scattered) spectral irradiance for a single wavelength.
-Dispatches on `diffuse_model` to select the scattering algorithm.
+Rayleigh and total optical depth at one wavelength (eqs. 13-14 McCullough & Porter 1971).
+
+Returns `(; rayleigh, total)`.
 """
-diffuse_irradiance(::NoScattering, n, λτR, params, buffers) = 0.0u"W/m^2/nm"
+function spectral_optical_depth(
+    wavelength_index, atmospheric_pressure, mixing_ratio_height,
+    rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth,
+    elevation_factors, ozone_depth, air_mass, precipitable_water,
+)
+    n, P, MR₀, m_Zₐ, cmH2O = wavelength_index, atmospheric_pressure, mixing_ratio_height, air_mass, precipitable_water
+    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
+    A₁, A₂, A₃, A₄ = elevation_factors.molecular, elevation_factors.aerosol, elevation_factors.ozone, elevation_factors.water
 
-function diffuse_irradiance(::DaveFurukawaScattering, n, λτR, params, buffers)
-    # Dave & Furukawa lookup table method (UV wavelengths only)
-    n > 11 && return 0.0u"W/m^2/nm"
-    (; ar², A, z, Sλ, FD, FDQ, s̄) = params
-    B = ustrip(u"°", z) / 5
-    k = trunc(Int, B) + 1 + (B % 1 > 0.5)
-    Q = A / (1.0 - A * s̄[n])  # eq. 31 in Dave & Furukawa 1966
-    Dλ = (Sλ[n] / π) * (FD[n, k] + FDQ[n, k] * Q) / 1000.0
-    return Dλ * ar²
-end
-
-function diffuse_irradiance(::ChandrasekharScattering, n, λτR, params, buffers)
-    # Full Chandrasekhar scattering model (eq. 15 McCullough & Porter 1971)
-    λτR < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
-    (; cz, intcz, Sλ, ar², m_Zₐ, A) = params
-    γᵣ, γₗ, s̄_scalar = scattered_radiation!(buffers.gamma, λτR)
-    I₀_λ = cz * Sλ[n] * ar² / 1000.0
-    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄_scalar))))
-            - exp(-float(λτR) * m_Zₐ)) * I₀_λ
-end
-
-"""
-    spectral_optical_depth(n, P, MR₀, τR, τO, τA, τW, A1, A2, A3, A4, ozone_depth, m_Zₐ, cmH2O)
-
-Calculate wavelength-specific optical depths and total optical depth.
-
-Returns `(; rayleigh, total)` - Rayleigh optical depth and total optical depth.
-"""
-function spectral_optical_depth(n, P, MR₀, τR, τO, τA, τW, A1, A2, A3, A4, ozone_depth, m_Zₐ, cmH2O)
-    λτR = (P / REFERENCE_PRESSURE) * τR[n] * A1
-    λτA = (REFERENCE_VISIBILITY / MR₀) * τA[n] * A2
-    λτO = (ozone_depth / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A3
-    λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A4)  # eq. 13 McCullough & Porter
-    λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW  # eq. 14 McCullough & Porter
-    λτ = min(λτ, MAX_OPTICAL_DEPTH)  # clamp to avoid numerical issues at low sun angles
+    λτR = (P / REFERENCE_PRESSURE) * τR[n] * A₁
+    λτA = (REFERENCE_VISIBILITY / MR₀) * τA[n] * A₂
+    λτO = (ozone_depth / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A₃
+    λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A₄)  # eq. 13
+    λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW  # eq. 14
+    λτ = min(λτ, MAX_OPTICAL_DEPTH)  # avoids numerical issues at low sun angles
     return (; rayleigh=λτR, total=λτ)
 end
 
 """
-    direct_irradiance(Sλ_n, ar², cz, λτ, λτR, m_Zₐ)
+    direct_irradiance(solar_spectral_irradiance, sun_distance_factor, cosine_zenith,
+        total_optical_depth, rayleigh_optical_depth, air_mass)
 
-Calculate direct spectral irradiance and Rayleigh-only direct irradiance.
+Direct and Rayleigh-only direct spectral irradiance at one wavelength, from the
+solar spectral irradiance at that wavelength.
 
 Returns `(; direct, rayleigh)` in W/m²/nm.
 """
-function direct_irradiance(Sλ_n, ar², cz, λτ, λτR, m_Zₐ)
+function direct_irradiance(
+    solar_spectral_irradiance, sun_distance_factor, cosine_zenith,
+    total_optical_depth, rayleigh_optical_depth, air_mass,
+)
+    Sλ_n, ar², cz = solar_spectral_irradiance, sun_distance_factor, cosine_zenith
+    λτ, λτR, m_Zₐ = total_optical_depth, rayleigh_optical_depth, air_mass
+
     part1 = Sλ_n * ar² * cz
     part2 = λτ > 0.0 ? exp(-λτ) : 0.0
 
@@ -188,10 +177,8 @@ function direct_irradiance(Sλ_n, ar², cz, λτ, λτR, m_Zₐ)
         Iλ = ((ustrip(u"W/m^2/nm", part1) * part2) / 1000.0) * u"W/m^2/nm"
     end
 
-    # Clamp to minimum value for numerical stability
     Iλ = max(Iλ, MIN_IRRADIANCE * u"W/m^2/nm")
 
-    # Rayleigh-only direct irradiance
     Iᵣλ = (Sλ_n * ar² * cz) * exp(-float(λτR) * m_Zₐ) / 1000.0
 
     return (; direct=Iλ, rayleigh=Iᵣλ)
@@ -218,11 +205,21 @@ function horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
 end
 
 """
-    trapezoidal_integrate!(∫vals, vals, λ, n)
+    trapezoidal_integrate!(direct_integral, rayleigh_integral, diffuse_integral, global_integral,
+        direct_spectrum, rayleigh_spectrum, diffuse_spectrum, global_spectrum,
+        wavelengths, wavelength_index)
 
-Perform one step of trapezoidal integration for spectral values.
+One step of cumulative trapezoidal integration over wavelength, for each spectrum.
 """
-function trapezoidal_integrate!(∫I, ∫Iᵣ, ∫D, ∫G, Iλ, Iᵣλ, Dλ, Gλ, λ, n)
+function trapezoidal_integrate!(
+    direct_integral, rayleigh_integral, diffuse_integral, global_integral,
+    direct_spectrum, rayleigh_spectrum, diffuse_spectrum, global_spectrum,
+    wavelengths, wavelength_index,
+)
+    ∫I, ∫Iᵣ, ∫D, ∫G = direct_integral, rayleigh_integral, diffuse_integral, global_integral
+    Iλ, Iᵣλ, Dλ, Gλ = direct_spectrum, rayleigh_spectrum, diffuse_spectrum, global_spectrum
+    λ, n = wavelengths, wavelength_index
+
     if n == 1
         ∫D[1] = 0.0u"W/m^2"
         ∫Iᵣ[1] = 0.0u"W/m^2"
@@ -267,33 +264,6 @@ function allocate_output_arrays(nsteps, ndays, nmax)
 end
 
 """
-    allocate_buffers(nmax, diffuse_model)
-
-Allocate working buffers for solar radiation computation.
-
-Returns a NamedTuple containing spectral integration arrays for reuse across multiple
-calls to `solar_radiation!`. `ChandrasekharScattering` additionally allocates iterative
-solver buffers in a `gamma` field.
-"""
-function allocate_buffers(nmax, ::AbstractDiffuseModel)
-    ∫G = fill(0.0u"W/m^2", nmax)
-    ∫Iᵣ = fill(0.0u"W/m^2", nmax)
-    ∫I = fill(0.0u"W/m^2", nmax)
-    ∫D = fill(0.0u"W/m^2", nmax)
-    Gλ = ∫G * u"1/nm"
-    Iᵣλ = ∫G * u"1/nm"
-    Iλ = ∫G * u"1/nm"
-    Dλ = ∫G * u"1/nm"
-    return (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ)
-end
-
-function allocate_buffers(nmax, ::ChandrasekharScattering)
-    base = allocate_buffers(nmax, DaveFurukawaScattering())
-    gamma = allocate_scattered_radiation()
-    return (; base..., gamma)
-end
-
-"""
     sunrise_hour_angle(declination, latitude)
 
 Calculate sunrise/sunset hour angles (eq.7 McCullough & Porter 1971).
@@ -325,17 +295,20 @@ Compute spectral irradiance for all wavelengths at a single timestep.
 Modifies `buffers` in place with computed spectral values.
 """
 function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below_horizon)
-    (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ) = buffers
-    (; nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, m_Zₐ,
-       ozone_depth, cmH2O, elevation_factors, diffuse_model) = params
-    (; molecular, aerosol, ozone, water) = elevation_factors
+    ∫G, ∫Iᵣ, ∫I, ∫D = buffers.global_integral, buffers.rayleigh_integral, buffers.direct_integral, buffers.diffuse_integral
+    Gλ, Iᵣλ, Iλ, Dλ = buffers.global_spectrum, buffers.rayleigh_spectrum, buffers.direct_spectrum, buffers.diffuse_spectrum
+    (; wavelength_count, atmospheric_pressure, mixing_ratio_height, rayleigh_optical_depth,
+       ozone_optical_depth, aerosol_optical_depth, water_optical_depth, wavelengths,
+       ozone_depth, precipitable_water, elevation_factors, diffuse_model, air_mass) = params
+    Sλ, ar², cz = params.solar_spectral_irradiance, params.sun_distance_factor, params.cosine_zenith
 
-    for n in 1:nmax
-        τ = spectral_optical_depth(n, P, MR₀, τR, τO, τA, τW,
-                                   molecular, aerosol, ozone, water,
-                                   ozone_depth, m_Zₐ, cmH2O)
+    for n in 1:wavelength_count
+        τ = spectral_optical_depth(n, atmospheric_pressure, mixing_ratio_height,
+                                   rayleigh_optical_depth, ozone_optical_depth,
+                                   aerosol_optical_depth, water_optical_depth,
+                                   elevation_factors, ozone_depth, air_mass, precipitable_water)
 
-        direct = direct_irradiance(Sλ[n], ar², cz, τ.total, τ.rayleigh, m_Zₐ)
+        direct = direct_irradiance(Sλ[n], ar², cz, τ.total, τ.rayleigh, air_mass)
         Iλ[n], Iᵣλ[n] = direct.direct, direct.rayleigh
 
         if sun_below_horizon
@@ -346,7 +319,7 @@ function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below
         Dλ[n] = diffuse_irradiance(diffuse_model, n, τ.rayleigh, params, buffers)
         Gλ[n] = Dλ[n] + Iλ[n]
 
-        trapezoidal_integrate!(∫I, ∫Iᵣ, ∫D, ∫G, Iλ, Iᵣλ, Dλ, Gλ, λ, n)
+        trapezoidal_integrate!(∫I, ∫Iᵣ, ∫D, ∫G, Iλ, Iᵣλ, Dλ, Gλ, wavelengths, n)
     end
 end
 
@@ -371,11 +344,10 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
     # Unpack model parameters with short aliases for equations
     (; solar_geometry_model, precipitable_water, diffuse_model, mixing_ratio_height,
        wavelength_count, wavelengths, ozone_column, rayleigh_optical_depth, ozone_optical_depth,
-       aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance,
-       diffuse_sky_irradiance, diffuse_ground_reflected, single_scattering_albedo) = solar_model
+       aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance) = solar_model
     nmax, λ = wavelength_count, wavelengths
     τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
-    Sλ, FD, FDQ, s̄ = solar_spectral_irradiance, diffuse_sky_irradiance, diffuse_ground_reflected, single_scattering_albedo
+    Sλ = solar_spectral_irradiance
     cmH2O, MR₀ = precipitable_water, mixing_ratio_height
 
     # Unpack terrain
@@ -398,8 +370,8 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             # Twilight handling
             skylight = twilight_irradiance(z)
             if skylight !== nothing
-                buffers.∫D[nmax] = skylight
-                buffers.∫G[nmax] = skylight
+                buffers.diffuse_integral[nmax] = skylight
+                buffers.global_integral[nmax] = skylight
                 out.global_horizontal[step] = skylight
                 out.diffuse_horizontal[step] = skylight
             end
@@ -432,12 +404,13 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
                 # Compute spectral irradiance
                 params = SpectralParams(
                     nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-                    ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z, FD, FDQ, s̄
+                    ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z
                 )
                 compute_spectral_irradiance!(buffers, params, alt < ahoriz)
 
                 # Store results
-                (; ∫G, ∫Iᵣ, ∫I, ∫D, Gλ, Iᵣλ, Iλ, Dλ) = buffers
+                ∫G, ∫Iᵣ, ∫I, ∫D = buffers.global_integral, buffers.rayleigh_integral, buffers.direct_integral, buffers.diffuse_integral
+                Gλ, Iᵣλ, Iλ, Dλ = buffers.global_spectrum, buffers.rayleigh_spectrum, buffers.direct_spectrum, buffers.diffuse_spectrum
 
                 out.global_spectra[step, :] .= Gλ
                 out.rayleigh_spectra[step, :] .= Iᵣλ

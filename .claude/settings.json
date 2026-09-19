@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(julia --project=. C:/Users/mrke/AppData/Local/Temp/claude/c--git-SolarRadiation-jl/96b09c36-32f4-473a-9985-0a2b9f46279e/scratchpad/baseline.jl C:/Users/mrke/AppData/Local/Temp/claude/c--git-SolarRadiation-jl/96b09c36-32f4-473a-9985-0a2b9f46279e/scratchpad/before.jls)",
+      "Bash(python -)",
+      "Bash(grep -v '^[+-]\\\\s*$')",
+      "Bash(julia --project=. __TRACKED_VAR__/baseline.jl __TRACKED_VAR__/after2.jls)",
+      "Bash(julia --project=. C:/Users/mrke/AppData/Local/Temp/claude/c--git-SolarRadiation-jl/96b09c36-32f4-473a-9985-0a2b9f46279e/scratchpad/baseline.jl C:/Users/mrke/AppData/Local/Temp/claude/c--git-SolarRadiation-jl/96b09c36-32f4-473a-9985-0a2b9f46279e/scratchpad/after3.jls)"
+    ]
+  }
+}
