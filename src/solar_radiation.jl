@@ -366,6 +366,7 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
     year::Real=1975,
     hours::AbstractVector{<:Real}=0:1:23,
     longitude_correction::Real=0.0,
+    days_in_year::Real=365,
 )
     # Unpack model parameters with short aliases for equations
     (; solar_geometry_model, precipitable_water, diffuse_model, mixing_ratio_height,
@@ -390,7 +391,7 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
         for j in 1:ntimes
             d, t = days[i], hours[j]
             h, tsn = hour_angle(t, longitude_correction)
-            solar_geom = solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h)
+            solar_geom = solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h, days_in_year)
             δ, z, ar² = solar_geom.solar_declination, solar_geom.zenith_angle, solar_geom.sun_distance_factor
             zsl = z
 
@@ -464,7 +465,8 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
 end
 
 """
-    solar_radiation(solar_model; solar_terrain, days, year, hours, longitude_correction)
+    solar_radiation(solar_model; solar_terrain, days, hours, ...)
+    solar_radiation(solar_model; solar_terrain, dates, hours, ...)
 
 Compute solar radiation for a given model and terrain configuration.
 
@@ -474,28 +476,85 @@ use `solar_radiation!` with pre-allocated buffers for better performance.
 # Arguments
 - `solar_model::AbstractSolarRadiation`: Solar radiation model parameters
 - `solar_terrain::AbstractTerrain`: Terrain configuration (elevation, slope, etc.)
+
+# Numeric interface (R-compatible)
 - `days`: Vector of days of year (default: mid-month days)
-- `year`: Year for leap year handling (default: 1975)
 - `hours`: Hours of day to compute (default: 0:23)
+- `year`: Year for leap year handling (default: 1975)
 - `longitude_correction`: Longitude correction in hours (default: 0.0)
+- `days_in_year`: Number of days in the year (default: 365). Use 366 for leap years,
+   or other values for non-standard calendars (e.g., 360 for 360-day calendar).
+
+# DateTime interface
+- `dates`: Vector of `AbstractDateTime` instances (one per day to simulate)
+- `hours`: Hour offsets as `Period` values (e.g., `Hour(0):Hour(1):Hour(23)`)
+- `timezone_offset`: Timezone offset from UTC in hours (default: 0.0)
+
+The DateTime interface extracts calendar information (leap years, 360-day calendars)
+from the date type automatically.
+
+# Examples
+```julia
+# Numeric interface
+solar_radiation(model; solar_terrain, days=1:10, hours=0:23, year=2024)
+
+# DateTime interface - mid-month days for a year
+using Dates
+dates = [Date(2024, m, 15) for m in 1:12]
+solar_radiation(model; solar_terrain, dates, hours=Hour(0):Hour(1):Hour(23))
+
+# With CFTime (no dependency required)
+using CFTime
+dates = [DateTimeNoLeap(2024, m, 15) for m in 1:12]
+solar_radiation(model; solar_terrain, dates, hours=Hour(0):Hour(1):Hour(23))
+```
 
 # Returns
 NamedTuple with zenith/azimuth angles, integrated irradiances, and spectral data.
 """
 function solar_radiation(solar_model::AbstractSolarRadiation;
     solar_terrain::AbstractTerrain,
-    days::Vector{<:Real}=[15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349],
+    # Numeric interface
+    days::Union{Nothing, AbstractVector{<:Real}}=nothing,
     year::Real=1975,
-    hours::AbstractVector{<:Real}=0:1:23,
+    hours::AbstractVector=0:1:23,
     longitude_correction::Real=0.0,
+    days_in_year::Real=365,
+    # DateTime interface (accepts Date, DateTime, or CFTime types)
+    dates::Union{Nothing, AbstractVector{<:Dates.TimeType}}=nothing,
+    timezone_offset::Real=0.0,
 )
+    # Determine which interface is being used
+    if !isnothing(dates)
+        # DateTime interface: extract from dates + hour offsets
+        days_in_year = Dates.daysinyear(first(dates))
+        year = Dates.year(first(dates))
+        longitude_correction = timezone_offset
+        # Convert dates to day-of-year, hours to numeric
+        days_numeric = [Dates.dayofyear(d) for d in dates]
+        hours_numeric = [Dates.value(Dates.Millisecond(h)) / 3_600_000 for h in hours]
+    elseif !isnothing(days)
+        # Numeric interface
+        days_numeric = collect(days)
+        hours_numeric = collect(hours)
+    else
+        # Default mid-month days
+        days_numeric = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349]
+        hours_numeric = collect(hours)
+    end
+
     nmax = solar_model.wavelength_count
-    ndays, ntimes = length(days), length(hours)
+    ndays, ntimes = length(days_numeric), length(hours_numeric)
     nsteps = ndays * ntimes
 
     out = allocate_output_arrays(nsteps, ndays, nmax)
     buffers = allocate_buffers(nmax, solar_model.diffuse_model)
 
     return solar_radiation!(out, buffers, solar_model;
-        solar_terrain, days, year, hours, longitude_correction)
+        solar_terrain,
+        days=days_numeric,
+        year,
+        hours=hours_numeric,
+        longitude_correction,
+        days_in_year)
 end

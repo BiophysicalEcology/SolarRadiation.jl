@@ -23,33 +23,45 @@ end
 abstract type AbstractSolarGeometryModel end
 
 """
+    orbital_angular_frequency(days_in_year::Real=365)
+
+Compute Earth's orbital angular frequency for a given year length.
+
+Handles leap years (366 days) and non-standard calendars (e.g., 360-day).
+"""
+orbital_angular_frequency(days_in_year::Real=365) = 2π / days_in_year
+
+"""
     McCulloughPorterSolarGeometry
 
 Solar geometry model based on McCullough & Porter (1971).
 
 # Fields
 - `reference_day`: Vernal equinox day of year (default: 80)
-- `orbital_angular_frequency`: Earth's orbital angular frequency (default: 2π/365)
 - `orbital_eccentricity`: Earth's orbital eccentricity (default: 0.0167238)
 - `declination_amplitude`: Solar declination amplitude (default: 0.39784993)
+
+Note: `orbital_angular_frequency` is now computed dynamically based on the year length
+to handle leap years and non-standard calendars. Use `orbital_angular_frequency(days_in_year)`.
 """
-@kwdef struct McCulloughPorterSolarGeometry{RD,OAF,OE,DA} <: AbstractSolarGeometryModel
+@kwdef struct McCulloughPorterSolarGeometry{RD,OE,DA} <: AbstractSolarGeometryModel
     reference_day::RD = 80
-    orbital_angular_frequency::OAF = 2π / 365
     orbital_eccentricity::OE = 0.0167238
     declination_amplitude::DA = 0.39784993
 end
 
 """
-    solar_geometry(model::McCulloughPorterSolarGeometry, latitude; day_of_year, hour_angle)
+    solar_geometry(model::McCulloughPorterSolarGeometry, latitude; day_of_year, hour_angle, days_in_year=365)
 
 Compute solar geometry parameters based on McCullough & Porter (1971).
 
 # Arguments
 - `model`: Solar geometry model with orbital parameters
 - `latitude`: Observer latitude (with angle units, e.g. `u"°"` or `u"rad"`)
-- `day_of_year`: Day of year (1–365)
+- `day_of_year`: Day of year (1–365, 1–366 for leap years, or 1–360 for 360-day calendars)
 - `hour_angle`: Hour angle (radians)
+- `days_in_year`: Number of days in the year (default: 365). Use 366 for leap years,
+   or other values for non-standard calendars (e.g., 360 for 360-day calendar).
 
 # Returns
 NamedTuple with:
@@ -65,10 +77,13 @@ solar_geometry(::McCulloughPorterSolarGeometry, ::Missing; kwargs...) = missing
 function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
     day_of_year::Real,
     hour_angle::Quantity,
+    days_in_year::Real=365,
 )
-    (; reference_day, orbital_angular_frequency, orbital_eccentricity, declination_amplitude) = sm
+    (; reference_day, orbital_eccentricity, declination_amplitude) = sm
+    # Compute orbital angular frequency dynamically based on year length
+    ω = orbital_angular_frequency(days_in_year)
     # Use short aliases for equations (standard notation)
-    d0, ω, ϵ, se = reference_day, orbital_angular_frequency, orbital_eccentricity, declination_amplitude
+    d0, ϵ, se = reference_day, orbital_eccentricity, declination_amplitude
     d, h = day_of_year, hour_angle
 
     ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # eq.5 McCullough & Porter (1971)
