@@ -11,13 +11,15 @@ for the terrestrial ecological environment. Ecology 52(6), 1008-1015, eq. 15.
 """
 struct ChandrasekharScattering <: AbstractDiffuseModel end
 
-function diffuse_irradiance(::ChandrasekharScattering, n, λτR, params, buffers)
+function diffuse_irradiance(::ChandrasekharScattering, wavelength_index, rayleigh_optical_depth, params, buffers)
+    n, λτR = wavelength_index, rayleigh_optical_depth
     λτR < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
     cz, intcz, Sλ = params.cosine_zenith, params.cosine_zenith_index, params.solar_spectral_irradiance
     ar², m_Zₐ, A = params.sun_distance_factor, params.air_mass, params.albedo
-    γᵣ, γₗ, s̄_scalar = scattered_radiation!(buffers.gamma, λτR)
+    (; polarization_l, polarization_r, s_function) = scattered_radiation!(buffers.gamma, λτR)
+    γₗ, γᵣ, s̄ = polarization_l, polarization_r, s_function
     I₀_λ = cz * Sλ[n] * ar² / 1000.0
-    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄_scalar))))
+    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄))))
             - exp(-float(λτR) * m_Zₐ)) * I₀_λ
 end
 
@@ -44,9 +46,20 @@ function allocate_scattered_radiation()
     )
 end
 
-scattered_radiation(τ::Float64) = scattered_radiation!(allocate_scattered_radiation(), τ)
+"""
+    scattered_radiation(optical_thickness) -> (; polarization_l, polarization_r, s_function)
+    scattered_radiation!(buffers, optical_thickness)
 
-function scattered_radiation!(buffers, τ::Float64)
+Functions of eq. 15 in McCullough & Porter (1971) for a Rayleigh atmosphere of the given
+optical thickness (up to 2.0): `polarization_l` and `polarization_r` are γₗ and γᵣ, for the
+two polarization directions, on the 101-point μ grid; `s_function` (s̄) depends on
+optical thickness only.
+"""
+scattered_radiation(optical_thickness::Float64) =
+    scattered_radiation!(allocate_scattered_radiation(), optical_thickness)
+
+function scattered_radiation!(buffers, optical_thickness::Float64)
+    τ = optical_thickness
     # Large arrays (mutable, normal)
     (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, chandrasekhar_XY_buffers) = buffers
     AI = buffers.auxiliary_terms  # short alias for the math below
@@ -159,7 +172,7 @@ function scattered_radiation!(buffers, τ::Float64)
         γᵣ[i] = AI[22] * (X2[i] + Y2[i]) - μ[i] * AI[23] * (X2[i] - Y2[i])
     end
 
-    return γᵣ, γₗ, s̄
+    return (; polarization_l=γₗ, polarization_r=γᵣ, s_function=s̄)
 end
 
 function init_chandrasekhar_XY_buffers()

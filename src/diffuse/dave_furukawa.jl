@@ -20,7 +20,8 @@ at selected levels of a terrestrial, Rayleigh atmosphere. Meteorological Monogra
     single_scattering_albedo::SSA = DEFAULT_SINGLE_SCATTERING_ALBEDO
 end
 
-function diffuse_irradiance(model::DaveFurukawaScattering, n, λτR, params, buffers)
+function diffuse_irradiance(model::DaveFurukawaScattering, wavelength_index, rayleigh_optical_depth, params, buffers)
+    n = wavelength_index
     n > 11 && return 0.0u"W/m^2/nm"
     ar², A, z, Sλ = params.sun_distance_factor, params.albedo, params.zenith_angle, params.solar_spectral_irradiance
     (; sky_irradiance, ground_reflected, single_scattering_albedo) = model

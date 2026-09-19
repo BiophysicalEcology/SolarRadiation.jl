@@ -7,7 +7,8 @@ Based on Rozenberg (1966) "Twilight" and Diem (1966) "Documenta Geigy Scientific
 
 Returns `nothing` if zenith angle is outside twilight range.
 """
-function twilight_irradiance(z)
+function twilight_irradiance(zenith_angle)
+    z = zenith_angle
     if 88u"°" < z < 107u"°"
         log_illuminance = TWILIGHT_LOG_INTERCEPT - TWILIGHT_LOG_SLOPE * ustrip(u"°", z)
         return (10.0^log_illuminance) * LUX_TO_WATTS_PER_M2 * u"W/m^2"
@@ -38,14 +39,15 @@ function is_sun_up(time_from_noon, sunrise_hour_angle)
 end
 
 """
-    slope_zenith_angle(zenith, terrain, solar_azimuth) -> (; zenith_angle, cosine_zenith)
+    slope_zenith_angle(zenith_angle, terrain, solar_azimuth) -> (; zenith_angle, cosine_zenith)
 
 Calculate the effective zenith angle on the terrain surface.
 
 On flat terrain (slope = 0°) returns the solar zenith angle unchanged.
 On sloped terrain adjusts for slope and aspect using Eq. 3.15 of Sellers (1965).
 """
-@inline function slope_zenith_angle(z, terrain::AbstractTerrain, solar_azimuth)
+@inline function slope_zenith_angle(zenith_angle, terrain::AbstractTerrain, solar_azimuth)
+    z = zenith_angle
     if terrain.slope > 0u"°"
         czsl = cos(z) * cos(terrain.slope) + sin(z) * sin(terrain.slope) * cos(solar_azimuth - terrain.aspect)
         zsl = acos(clamp(czsl, -1.0, 1.0))  # guard against floating-point overshoot past ±1
@@ -61,7 +63,7 @@ On sloped terrain adjusts for slope and aspect using Eq. 3.15 of Sellers (1965).
 end
 
 """
-    terrain_irradiance(global_horizontal, cosine_zenith, cosine_slope_zenith, zenith, terrain)
+    terrain_irradiance(global_horizontal, cosine_zenith, cosine_slope_zenith, zenith_angle, terrain)
 
 Calculate terrain-adjusted global irradiance.
 
@@ -69,8 +71,9 @@ On flat terrain returns `global_horizontal` unchanged. On sloped terrain, scales
 horizontal irradiance by the ratio of slope to horizontal cosine zenith when the
 sun is above the horizon.
 """
-function terrain_irradiance(global_h, cz, czsl, z, terrain::AbstractTerrain)
-    terrain.slope > 0u"°" && z < 90.0u"°" ? max(0.0u"W/m^2", (global_h / cz) * czsl) : global_h
+function terrain_irradiance(global_horizontal, cosine_zenith, cosine_slope_zenith, zenith_angle, terrain::AbstractTerrain)
+    terrain.slope > 0u"°" && zenith_angle < 90.0u"°" ?
+        max(0.0u"W/m^2", (global_horizontal / cosine_zenith) * cosine_slope_zenith) : global_horizontal
 end
 
 """
@@ -80,7 +83,8 @@ Apply atmospheric refraction correction to zenith angle.
 
 Only applies for zenith angles > 88° (McCullough & Porter 1971).
 """
-function refraction_correction(z)
+function refraction_correction(zenith_angle)
+    z = zenith_angle
     if z < REFRACTION_ZENITH_THRESHOLD
         return z
     end
@@ -99,7 +103,8 @@ Calculate optical air mass using Rozenberg (1966) formula.
 
 Reference: p.159 eq. III.3.17 in "Twilight" by Rozenberg (1966).
 """
-function optical_air_mass(z)
+function optical_air_mass(zenith_angle)
+    z = zenith_angle
     return 1.0 / (cos(z) + AIR_MASS_A * exp(-AIR_MASS_B * cos(z)))
 end
 
@@ -273,7 +278,8 @@ Returns `(; tanδ_tanϕ, H₊, H₋)`:
 - `H₊`: Hour angle at sunset (radians)
 - `H₋`: Hour angle at sunrise (hours)
 """
-function sunrise_hour_angle(δ, ϕ)
+function sunrise_hour_angle(declination, latitude)
+    δ, ϕ = declination, latitude
     # TODO: this manual ustrip shouldn't be needed — degrees aren't a "real"
     # unit and `tan(::Quantity{°})` ought to be allocation-free. In practice
     # it goes through a Unitful conversion path that heap-allocates ~8

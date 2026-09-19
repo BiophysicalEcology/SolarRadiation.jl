@@ -7,9 +7,9 @@ Supertype of diffuse (scattered) irradiance models: [`NoScattering`](@ref),
 abstract type AbstractDiffuseModel end
 
 """
-    diffuse_irradiance(model::AbstractDiffuseModel, n, λτR, params::SpectralParams, buffers)
+    diffuse_irradiance(model::AbstractDiffuseModel, wavelength_index, rayleigh_optical_depth, params::SpectralParams, buffers)
 
-Diffuse spectral irradiance for wavelength index `n` given Rayleigh optical depth `λτR`.
+Diffuse spectral irradiance at `wavelength_index` given the Rayleigh optical depth at that wavelength.
 """
 function diffuse_irradiance end
 
