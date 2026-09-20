@@ -14,6 +14,10 @@ mkpath(ENV["RASTERDATASOURCES_PATH"])
 # Helpers for the figures, loaded in the examples with `using Main.FigureHelpers`
 include("figure_helpers.jl")
 
+# Set the environment variable DOCS_PAGE_TIMES to time the pages
+timing_pages = haskey(ENV, "DOCS_PAGE_TIMES")
+timing_pages && include("page_timing.jl")
+
 makedocs(
     modules = [SolarRadiation],
     sitename = "SolarRadiation.jl",
@@ -30,6 +34,8 @@ makedocs(
     build = "build",
     warnonly = true,
 )
+
+timing_pages && PageTiming.report()
 
 DocumenterVitepress.deploydocs(;
     repo = "github.com/BiophysicalEcology/SolarRadiation.jl",

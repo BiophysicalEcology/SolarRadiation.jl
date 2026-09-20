@@ -243,47 +243,7 @@ f
 The shortest time is from 6 to 8 minutes from about 35°S to 25°N, 8 to 10 minutes to about 45°S and 40°N, and it lengthens to 15 to 20 minutes at 65° of latitude and to 30 to 60 minutes
 near the poles. The band of the shortest times reaches further from the equator in the southern hemisphere, because the earth is closest to the sun in January. Only the highest ground has less than
 6 minutes, the Andes, the plateaus of eastern and southern Africa, the plateau of Mexico and the Tibetan plateau, where there is less air above the ground. This pattern can be compared with the geographic distribution of human skin pigmentation, which is darker where
-the ultraviolet radiation is greater (Jablonski and Chaplin 2000). The pigmentation also depends on the history of the populations, and the map is for clear skies at noon, so the comparison is of the radiation
-that a skin could receive.
-
-## Comparison with Cripps and Ramsay
-
-Cripps and Ramsay (1970) irradiated the skin of the back of healthy Caucasian adults with narrow wavebands and found the MED at each wavelength, from 1160 mJ cm⁻² at 320 nm to 6.2 mJ cm⁻² at 290 nm
-(Table II, the mean at 24 hours). The time to the MED of the spectrum is that at which the sum over the wavelengths of the dose relative to the MED reaches 1,
-
-```math
-t = \left[\int_{290\,\mathrm{nm}}^{320\,\mathrm{nm}} \frac{E_\lambda}{\mathrm{MED}_\lambda}\, d\lambda\right]^{-1}
-```
-
-using the first seven wavelengths of the model, 5 nm apart:
-
-```@example sunburn
-cripps_wavelengths = uv_wavelengths[1:7]
-cripps_med = uconvert.(u"J/m^2", [6.19, 6.86, 11.6, 25.1, 224.0, 560.0, 1160.0] .* u"mJ/cm^2")
-
-function minutes_to_cripps_and_ramsay(global_spectrum)
-    rate = trapezoid(cripps_wavelengths, global_spectrum[1:7] ./ cripps_med)
-    rate > 0u"1/s" ? uconvert(u"minute", 1 / rate) : Inf * u"minute"
-end
-
-markdown_table(["Wavelength (nm)", "Cripps and Ramsay, relative to 290 nm", "CIE action spectrum"],
-    [(w / u"nm", round(first(cripps_med) / m; sigdigits = 3), round(erythema_action_spectrum(w); sigdigits = 3)) for (w, m) in zip(cripps_wavelengths, cripps_med)])
-```
-
-The times to the MED of Cripps and Ramsay and to 1 SED and 1.5 SED at noon, and the effective dose of the CIE spectrum that the Cripps and Ramsay time gives:
-
-```@example sunburn
-comparison_cases = (("Melbourne, 15 January", -37.8, 15), ("Melbourne, 15 July", -37.8, 196), ("Equator, 21 March", 0.0, 80))
-comparison_rows = map(comparison_cases) do (name, latitude, day)
-    result = solar_radiation(model; solar_terrain = terrain(latitude), days = [day], hours = [12.0])
-    spectrum = result.global_spectra[1, :]
-    minutes = minutes_to_cripps_and_ramsay(spectrum)
-    (name, round(minutes / u"minute"; digits = 1), round(minutes_to_erythema(spectrum, 1.0) / u"minute"; digits = 1),
-        round(minutes_to_erythema(spectrum, 1.5) / u"minute"; digits = 1),
-        round(uconvert(u"J/m^2", effective_irradiance(spectrum) * minutes) / standard_erythema_dose; digits = 2))
-end
-markdown_table(["Place and day", "Cripps and Ramsay (min)", "1 SED (min)", "1.5 SED (min)", "SED at the Cripps and Ramsay time"], comparison_rows)
-```
+the ultraviolet radiation is greater (Jablonski and Chaplin 2000; Del Bino et al. 2018). The pigmentation also depends on the history of the populations, and the map is for clear skies at noon, so the comparison is of the radiation that a skin could receive.
 
 ## Speed
 
@@ -298,7 +258,7 @@ The UV is calculated with the [`DaveFurukawaScattering`](@ref) model at a single
 
 CIE (1998) Erythema reference action spectrum and standard erythema dose. CIE S 007/E-1998. Also ISO 17166:1999.
 
-Cripps DJ, Ramsay CA (1970) Ultraviolet action spectrum with a prism-grating monochromator. British Journal of Dermatology 82: 584-592.
+Del Bino S, Duval C, Bernerd F (2018) Clinical and biological characterization of skin pigmentation diversity and its consequences on UV impact. International Journal of Molecular Sciences 19(9): 2668. [doi:10.3390/ijms19092668](https://doi.org/10.3390/ijms19092668)
 
 Jablonski NG, Chaplin G (2000) The evolution of human skin coloration. Journal of Human Evolution 39: 57-106.
 

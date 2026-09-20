@@ -81,7 +81,8 @@ directions = 32
 
 slope = Geomorphometry.slope(dem; method = Horn(), cellsize = cell_size)
 aspect = Geomorphometry.aspect(dem; method = Horn(), cellsize = cell_size)
-horizon = circshift(Geomorphometry.horizon_angle(parent(dem); directions, cellsize = cell_size), (0, 0, -directions ÷ 4))
+horizon_seconds = @elapsed horizon_from_north_of_matrix = Geomorphometry.horizon_angle(parent(dem); directions, cellsize = cell_size)
+horizon = circshift(horizon_from_north_of_matrix, (0, 0, -directions ÷ 4))
 size(horizon)
 ```
 
@@ -311,13 +312,14 @@ june_without_horizon = daily(hourly_radiation(june, june_solstice; use_horizon =
 
 function radiation_statistics(name, radiation)
     v = filter(!isnan, radiation)
-    (case = name, mean = round(sum(v) / length(v); digits = 2), minimum = round(minimum(v); digits = 2), maximum = round(maximum(v); digits = 2))
+    (name, round(sum(v) / length(v); digits = 2), round(minimum(v); digits = 2), round(maximum(v); digits = 2))
 end
 
-[radiation_statistics("December, without the horizon", without_horizon),
-    radiation_statistics("December, with the horizon", with_horizon),
-    radiation_statistics("June, without the horizon", june_without_horizon),
-    radiation_statistics("June, with the horizon", daily(june_hourly))]
+markdown_table(["Case", "Mean (MJ m⁻² day⁻¹)", "Minimum", "Maximum"],
+    [radiation_statistics("December, without the horizon", without_horizon),
+     radiation_statistics("December, with the horizon", with_horizon),
+     radiation_statistics("June, without the horizon", june_without_horizon),
+     radiation_statistics("June, with the horizon", daily(june_hourly))])
 ```
 
 The horizon removes the direct beam where the summit and the ridges hide the sun, and does not change the cells with an open horizon. It lowers the
@@ -331,7 +333,6 @@ The terrain of the whole area, and the radiation for each of the cells, were cal
 cells = length(dem)
 slope_seconds = @elapsed Geomorphometry.slope(dem; method = Horn(), cellsize = cell_size)
 aspect_seconds = @elapsed Geomorphometry.aspect(dem; method = Horn(), cellsize = cell_size)
-horizon_seconds = @elapsed Geomorphometry.horizon_angle(parent(dem); directions, cellsize = cell_size)
 solar_cells = count(parent(land)[cells_x, cells_y])
 
 markdown_table(["Step", "Cells", "Seconds", "Microseconds per cell"],
@@ -341,7 +342,7 @@ markdown_table(["Step", "Cells", "Seconds", "Microseconds per cell"],
      ("radiation for a day, hourly", solar_cells, round(seconds; sigdigits = 2), round(1e6 * seconds / solar_cells; sigdigits = 2))])
 ```
 
-The radiation for a day is a calculation at 24 times and 111 wavelengths for each cell. It is proportional to the number of cells and times, and with
+The time of the horizon angles is that of their calculation above, which includes the compilation of the function, about 2 s. The radiation for a day is a calculation at 24 times and 111 wavelengths for each cell. It is proportional to the number of cells and times, and with
 [`ChandrasekharScattering`](@ref) it would be more than a thousand times longer (see [Diffuse models](../manual/diffuse_models.md)).
 
 ## References
