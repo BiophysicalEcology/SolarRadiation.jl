@@ -36,7 +36,7 @@ end
 
 wavelengths = SolarProblem().wavelengths
 band = wavelengths[findall(w -> 400u"nm" <= w <= 700u"nm", wavelengths)]
-(wavelengths_in_band = length(band), first = first(band), last = last(band))
+markdown_table(["Wavelengths in the band", "First (nm)", "Last (nm)"], [(length(band), first(band) / u"nm", last(band) / u"nm")])
 ```
 
 ## PAR through the day
@@ -83,12 +83,13 @@ noon = findfirst(==(12.0), hours)
 january = (energy = total(noon).energy, photon_flux = total(noon).photon_flux,
     fraction_of_global = total(noon).energy / out.global_horizontal[noon],
     diffuse_fraction = diffuse(noon).energy / total(noon).energy)
-```
 
-The photons per second for each watt of PAR, found from the spectrum, are:
-
-```@example par
-uconvert(u"μmol/J", january.photon_flux / january.energy)
+markdown_table(["Quantity", "Value"],
+    [("PAR (W m⁻²)", round(january.energy / u"W/m^2"; digits = 1)),
+     ("PPFD (µmol m⁻² s⁻¹)", round(january.photon_flux / u"μmol/m^2/s"; digits = 0)),
+     ("PAR as a fraction of the global radiation", round(january.fraction_of_global; digits = 3)),
+     ("Diffuse fraction of the PAR", round(january.diffuse_fraction; digits = 3)),
+     ("Photons per joule of PAR (µmol J⁻¹)", round(uconvert(u"μmol/J", january.photon_flux / january.energy) / u"μmol/J"; digits = 2))])
 ```
 
 ## Compared with a fixed fraction of the global radiation
@@ -144,7 +145,7 @@ model, by 15 to 30 % on these days. The fraction of the model is close to that a
 ```@example par
 in_band = findall(w -> 400u"nm" <= w <= 700u"nm", wavelengths)
 solar = SolarProblem().solar_spectral_irradiance
-trapezoid(wavelengths[in_band], solar[in_band]) / trapezoid(wavelengths, solar)
+round(trapezoid(wavelengths[in_band], solar[in_band]) / trapezoid(wavelengths, solar); digits = 3)
 ```
 
 That the atmosphere hardly changes the fraction is a reminder that the water vapour absorption of the model, which removes infrared light, is tabulated at only
@@ -236,7 +237,7 @@ Markdown.parse(join(["| Case | From the spectrum | Fixed fraction | Error of the
 
 ```@example par
 steps = length(days) * length(hours_hourly) * length(latitudes)
-(steps = steps, seconds = round(seconds; sigdigits = 2), milliseconds_per_step = round(1000 * seconds / steps; sigdigits = 2))
+markdown_table(["Steps", "Seconds", "Milliseconds per step"], [(steps, round(seconds; sigdigits = 2), round(1000 * seconds / steps; sigdigits = 2))])
 ```
 
 The time is that of the [`ChandrasekharScattering`](@ref) diffuse model, which calculates the diffuse radiation of the visible wavelengths, so that PAR is complete.

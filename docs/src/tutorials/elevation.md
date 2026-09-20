@@ -7,6 +7,10 @@ the Rayleigh scattering are less, and the aerosols, which are mostly in the lowe
 WorldClim (Fick and Hijmans 2017) and the aerosols of the [Global Aerosol Data Set](../manual/aerosols.md#The-Global-Aerosol-Data-Set) (GADS),
 which are interpolated between its 5° cells.
 
+```@setup elevation
+using Main.FigureHelpers
+```
+
 ## Setup
 
 ```julia
@@ -36,7 +40,8 @@ using CairoMakie
 
 area = Extent(X = (85.5, 88.5), Y = (26.5, 28.5))
 elevation = read(crop(Raster(getraster(WorldClim{Elevation}, :elev; res = "2.5m")); to = area))
-(cells = size(elevation), range_m = extrema(skipmissing(elevation)))
+low, high = extrema(skipmissing(elevation))
+markdown_table(["Cells (longitude × latitude)", "Lowest (m)", "Highest (m)"], [(join(size(elevation), " × "), round(Int, low), round(Int, high))])
 ```
 
 ```@example elevation
@@ -181,7 +186,7 @@ fig
 
 ```@example elevation
 cells = length(elevation)
-(cells = cells, seconds_per_map = round(seconds; sigdigits = 2), milliseconds_per_cell = round(1000 * seconds / cells; sigdigits = 2))
+markdown_table(["Cells", "Seconds per map", "Milliseconds per cell"], [(cells, round(seconds; sigdigits = 2), round(1000 * seconds / cells; sigdigits = 2))])
 ```
 
 The [`ChandrasekharScattering`](@ref) model is used in these examples to get full spectrum diffuse radiation, but this takes most of the time. With the default [`DaveFurukawaScattering`](@ref) it is more than a thousand times shorter, and the terrain of the [Saba tutorial](saba.md) shows a day of radiation for every cell of a much finer grid with the latter, faster scattering algorithm.

@@ -208,7 +208,7 @@ The time taken gives an idea of the speed:
 
 ```@example mapping
 ncells = length(template)
-(cells = ncells, seconds = round(seconds; sigdigits = 2), milliseconds_per_cell = round(1000 * seconds / ncells; sigdigits = 2))
+markdown_table(["Cells", "Seconds", "Milliseconds per cell"], [(ncells, round(seconds; sigdigits = 2), round(1000 * seconds / ncells; sigdigits = 2))])
 ```
 
 The time is proportional to the number of cells and the number of times. With the default [`DaveFurukawaScattering`](@ref) it would
