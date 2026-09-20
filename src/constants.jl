@@ -52,6 +52,10 @@ const MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR = 0.03
 # McCullough & Porter (1971), used with Elterman tabulations
 const REFERENCE_OZONE_DEPTH_CM = 0.34
 
+# Reference precipitable water of the air column, for the tabulated water vapour optical depths
+# McCullough & Porter (1971)
+const REFERENCE_PRECIPITABLE_WATER = 1.0u"cm"
+
 # Maximum optical depth clamp (numerical stability)
 const MAX_OPTICAL_DEPTH = 80.0
 
@@ -149,7 +153,9 @@ const DEFAULT_SOLAR_SPECTRAL_IRRADIANCE = [
         5.9, 5.5, 5.4, 4.8, 4.3, 3.9, 3.5, 3.1, 2.6, 2.3, 1.9, 1.7, 1.5, 1.4, 1.2, 1.1, 1, 1
     ] * 10.0u"W/m^2/nm"
 
-const DEFAULT_DIFFUSE_SKY_IRRADIANCE = reshape([
+# Dave & Furukawa (1966) tables, listed with the zenith angle (19 values, 0° to 90°) varying fastest for each
+# of the 11 wavelengths, and stored here as wavelength by zenith angle.
+const DEFAULT_DIFFUSE_SKY_IRRADIANCE = permutedims(reshape([
             8.00e-5, 6.50e-5, 4.00e-5, 2.30e-5, 1.00e-5, 4.50e-6, 1.00e-6, 1.00e-7, 5.50e-9,
             1.00e-9, 3.50e-10, 1.60e-10, 1.00e-10, 1.00e-10, 1.00e-10, 1.00e-10, 1.00e-10,
             1.00e-10, 1.00e-10, 1.00e-3, 9.50e-4, 9.00e-4, 8.00e-4, 7.00e-4, 6.00e-4,
@@ -176,8 +182,8 @@ const DEFAULT_DIFFUSE_SKY_IRRADIANCE = reshape([
             3.90e-1, 3.00e-1, 1.85e-1, 9.00e-2, 2.60e-2, 6.51e-1, 6.50e-1, 6.50e-1,
             6.40e-1, 6.30e-1, 6.25e-1, 6.22e-1, 6.00e-1, 5.90e-1, 5.70e-1, 5.50e-1,
             5.20e-1, 4.89e-1, 4.60e-1, 3.90e-1, 3.08e-1, 2.00e-1, 9.55e-2, 2.20e-2
-        ], (11, 19))
-const DEFAULT_DIFFUSE_GROUND_REFLECTED = reshape([
+        ], (19, 11)))
+const DEFAULT_DIFFUSE_GROUND_REFLECTED = permutedims(reshape([
             8.00e-6, 7.00e-6, 5.20e-6, 3.50e-6, 1.70e-6, 5.50e-7, 1.00e-7, 2.50e-8, 6.00e-9,
             1.50e-9, 3.00e-10, 6.00e-11, 1.00e-11, 1.00e-11, 1.00e-11, 1.00e-11, 1.00e-11,
             1.00e-11, 1.00e-11, 6.10e-4, 6.00e-4, 5.50e-4, 4.50e-4, 3.40e-4, 2.30e-4,
@@ -204,8 +210,8 @@ const DEFAULT_DIFFUSE_GROUND_REFLECTED = reshape([
             1.80e-1, 1.30e-1, 7.00e-2, 2.90e-2, 1.10e-2, 7.50e-1, 7.40e-1, 7.30e-1,
             7.20e-1, 7.00e-1, 6.70e-1, 6.10e-1, 5.50e-1, 5.00e-1, 4.50e-1, 4.00e-1,
             3.60e-1, 3.20e-1, 2.60e-1, 1.90e-1, 1.40e-1, 8.00e-2, 3.10e-2, 1.20e-2
-        ], (11, 19))
+        ], (19, 11)))
 
-const DEFAULT_SINGLE_SCATTERING_ALBEDO = [0.2, 0.255, 0.315, 0.365, 0.394, 0.405, 0.405, 0.395, 0.37, 0.343, 0.32]
+const DEFAULT_SPHERICAL_ALBEDO = [0.2, 0.255, 0.315, 0.365, 0.394, 0.405, 0.405, 0.395, 0.37, 0.343, 0.32]
 
 

@@ -30,6 +30,7 @@ Check if the sun is above the horizon.
 """
 function is_sun_up(time_from_noon, sunrise_hour_angle)
     ts, H₋ = time_from_noon, sunrise_hour_angle
+    H₋ <= 0.0 && return false  # polar night
     if ts <= 0.0 && abs(ts) > H₋
         return false
     elseif ts > 0.0 && ts >= H₋
@@ -79,9 +80,10 @@ end
 """
     refraction_correction(zenith_angle)
 
-Apply atmospheric refraction correction to zenith angle.
+Zenith angle in radians corrected for atmospheric refraction, applied for zenith angles above 88°.
 
-Only applies for zenith angles > 88° (McCullough & Porter 1971).
+The correction is 16′ at 88° plus 7.5′ per degree beyond it, where McCullough & Porter (1971)
+give 10′ per degree.
 """
 function refraction_correction(zenith_angle)
     z = zenith_angle
@@ -151,7 +153,7 @@ function spectral_optical_depth(
     λτR = (P / REFERENCE_PRESSURE) * τR[n] * A₁
     λτA = (REFERENCE_VISIBILITY / MR₀) * τA[n] * A₂
     λτO = (ozone_depth / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A₃
-    λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A₄)  # eq. 13
+    λτW = τW[n] * sqrt(m_Zₐ * uconvert(NoUnits, cmH2O / REFERENCE_PRECIPITABLE_WATER) * A₄)  # eq. 13
     λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW  # eq. 14
     λτ = min(λτ, MAX_OPTICAL_DEPTH)  # avoids numerical issues at low sun angles
     return (; rayleigh=λτR, total=λτ)
@@ -192,7 +194,8 @@ end
 """
     horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
 
-Look up the horizon angle at a given solar azimuth.
+Horizon angle in the direction nearest to `solar_azimuth`. `horizon_angles` are at equal
+azimuth steps clockwise from north, the first pointing north.
 """
 function horizon_angle_at_azimuth(solar_azimuth, horizon_angles)
     n = length(horizon_angles)
@@ -242,7 +245,8 @@ end
 """
     allocate_output_arrays(nsteps, ndays, nmax)
 
-Allocate all output arrays for solar radiation computation.
+Output arrays for [`solar_radiation!`](@ref), for `nsteps` times over `ndays` days and `nmax` wavelengths.
+Returns a `NamedTuple` with the fields described under [`solar_radiation`](@ref).
 """
 function allocate_output_arrays(nsteps, ndays, nmax)
     return (;
@@ -274,7 +278,7 @@ end
 Calculate sunrise/sunset hour angles (eq.7 McCullough & Porter 1971).
 
 Returns `(; tanδ_tanϕ, H₊, H₋)`:
-- `tanδ_tanϕ`: Product of tangents (used for polar day/night detection)
+- `tanδ_tanϕ`: `-tan δ tan ϕ`, the cosine of the sunset hour angle; `≥ 1` is polar night (`H₊ = 0`), `≤ -1` is polar day (`H₊ = π`)
 - `H₊`: Hour angle at sunset (radians)
 - `H₋`: Hour angle at sunrise (hours)
 """
@@ -288,7 +292,7 @@ function sunrise_hour_angle(declination, latitude)
     # in the meantime: ustrip ϕ once into Float64 radians.
     ϕ_rad = ustrip(u"°", ϕ) * (π / 180.0)
     tanδ_tanϕ = -tan(δ) * tan(ϕ_rad)
-    H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
+    H₊ = tanδ_tanϕ >= 1 ? 0.0 : tanδ_tanϕ <= -1 ? π : acos(tanδ_tanϕ)  # polar night : polar day
     H₋ = 12.0 * H₊ / π
     return (; tanδ_tanϕ, H₊, H₋)
 end
@@ -372,6 +376,17 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             solar_geom = solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h, days_in_year)
             δ, z, ar² = solar_geom.solar_declination, solar_geom.zenith_angle, solar_geom.sun_distance_factor
             zsl = z
+
+            # Clear the step, so that reused arrays keep nothing from an earlier call when the sun is down
+            out.rayleigh_horizontal[step] = 0.0u"W/m^2"
+            out.direct_horizontal[step] = 0.0u"W/m^2"
+            out.diffuse_horizontal[step] = 0.0u"W/m^2"
+            out.global_horizontal[step] = 0.0u"W/m^2"
+            out.global_terrain[step] = 0.0u"W/m^2"
+            fill!(view(out.rayleigh_spectra, step, :), 0.0u"W/nm/m^2")
+            fill!(view(out.direct_spectra, step, :), 0.0u"W/nm/m^2")
+            fill!(view(out.diffuse_spectra, step, :), 0.0u"W/nm/m^2")
+            fill!(view(out.global_spectra, step, :), 0.0u"W/nm/m^2")
 
             # Twilight handling
             skylight = twilight_irradiance(z)
@@ -467,29 +482,41 @@ use `solar_radiation!` with pre-allocated buffers for better performance.
 # DateTime interface
 - `dates`: Vector of `AbstractDateTime` instances (one per day to simulate)
 - `hours`: Hour offsets as `Period` values (e.g., `Hour(0):Hour(1):Hour(23)`)
-- `timezone_offset`: Timezone offset from UTC in hours (default: 0.0)
+- `timezone_offset`: hours added to 12:00 to give the time of solar noon, the same as `longitude_correction`
+  (default: 0.0). It is not the offset from UTC. For longitude `λ` and a time zone with standard meridian `λ₀`,
+  both in degrees east, it is `(λ₀ - λ) / 15`.
 
 The DateTime interface extracts calendar information (leap years, 360-day calendars)
 from the date type automatically.
 
 # Examples
 ```julia
+using SolarRadiation, Unitful, Dates
+
+solar_terrain = SolarTerrain(;
+    elevation=0.0u"m", horizon_angles=fill(0.0u"°", 24), slope=0.0u"°", aspect=0.0u"°",
+    albedo=0.2, atmospheric_pressure=101325.0u"Pa", latitude=-37.0u"°", longitude=145.0u"°",
+)
+model = SolarProblem()
+
 # Numeric interface
 solar_radiation(model; solar_terrain, days=1:10, hours=0:23, year=2024)
 
-# DateTime interface - mid-month days for a year
-using Dates
+# DateTime interface - mid-month days for a year. `hours` must be `Period`s.
 dates = [Date(2024, m, 15) for m in 1:12]
-solar_radiation(model; solar_terrain, dates, hours=Hour(0):Hour(1):Hour(23))
-
-# With CFTime (no dependency required)
-using CFTime
-dates = [DateTimeNoLeap(2024, m, 15) for m in 1:12]
 solar_radiation(model; solar_terrain, dates, hours=Hour(0):Hour(1):Hour(23))
 ```
 
+Calendar types from CFTime, such as `DateTimeNoLeap`, are also accepted as `dates`.
+
 # Returns
-NamedTuple with zenith/azimuth angles, integrated irradiances, and spectral data.
+A `NamedTuple` with one entry per time step, ordered by day and then hour, unless stated:
+- `zenith_angle`, `zenith_slope_angle`, `azimuth_angle`: sun position in degrees. The angles are 90° when the sun is below the horizon, except `zenith_angle`.
+- `day_of_year`, `hour`: time of each step.
+- `hour_angle_sunrise`, `hour_solar_noon`: sunrise hour angle and solar noon, in hours, one per day.
+- `rayleigh_horizontal`, `direct_horizontal`, `diffuse_horizontal`, `global_horizontal`: irradiance on a horizontal surface, in W/m².
+- `global_terrain`: global irradiance on the sloping surface, in W/m².
+- `rayleigh_spectra`, `direct_spectra`, `diffuse_spectra`, `global_spectra`: spectral irradiance in W/m²/nm, as a matrix of time steps by wavelengths.
 """
 function solar_radiation(solar_model::AbstractSolarRadiation;
     solar_terrain::AbstractTerrain,

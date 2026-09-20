@@ -1,0 +1,23 @@
+[deps]
+ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
+Extents = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
+FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
+FixedPointNumbers = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
+FluidProperties = "d16f1b92-71d3-42f3-aafa-43e5bb0efda8"
+GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+Geomorphometry = "714e3e49-7933-471a-9334-4a6a65a92f36"
+ImageIO = "82e4d734-157c-48bb-816b-45c225c6df19"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+NaturalEarth = "436b0209-26ab-4e65-94a9-6526d86fea76"
+RasterDataSources = "3cb90ccd-e1b6-4867-9617-4276c8b2ca36"
+Rasters = "a3a2b9e3-a471-40c9-b274-f788e487c689"
+SolarRadiation = "d01e3663-6acb-4162-92ee-c50acb918cac"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[sources]
+FluidProperties = {rev = "main", url = "https://github.com/BiophysicalEcology/FluidProperties.jl"}
+SolarRadiation = {path = ".."}

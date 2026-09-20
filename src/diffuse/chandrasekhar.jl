@@ -210,57 +210,35 @@ function init_chandrasekhar_XY_buffers()
 end
 
 """
-    chandrasekhar_XY(τ::Float64, characteristic_function_coeffs::Vector{Float64}, case_number::Int) 
-        -> (X::Vector{Float64}, Y::Vector{Float64}, num_iterations::Int)
+    chandrasekhar_XY(τ, characteristic_function_coeffs, case_number) -> (X, Y, num_iterations)
 
-Compute Chandrasekhar's X and Y functions for radiative transfer.
+Chandrasekhar's X and Y functions for a plane-parallel atmosphere of normal optical thickness `τ`.
 
-# Description
-This routine evaluates the X- and Y-functions of Chandrasekhar using
-double precision arithmetic. The method starts with the fourth
-approximation given in Sec. 59 of Chandrasekhar’s *Radiative Transfer*
-(Dover Publications, 1960), and iteratively refines the values
-according to the procedure in Sec. 60. Iteration terminates when
-successive corrected values of the Y-function agree to four significant
-figures.
+Starts from the fourth approximation of Sec. 59 of Chandrasekhar (1960) and refines it
+as in Sec. 60, until successive values of Y agree to a relative tolerance of 2e-4 or after
+15 iterations.
 
-# Inputs
-- `τ::Float64`:  
-  Normal optical thickness of the atmosphere.  
-  Must be ≤ 2.0.
-
-- `characteristic_function_coeffs::NTuple{3,Float64}`:  
-  Coefficients of the characteristic function in polynomial form:  
+# Arguments
+- `τ::Float64`: normal optical thickness, at most 2.0.
+- `characteristic_function_coeffs::Vector{Float64}`: coefficients ``A_j`` of the characteristic function
   ```math
-  C(μ) = Σⱼ Aⱼ * μ^(2(j-1)),   j = 1,2,3
+  \\Psi(\\mu) = \\sum_{j=1}^{3} A_j \\mu^{2(j-1)}
+  ```
+- `case_number::Int`: `0` for the non-conservative case; any other value gives the conservative
+  case and a standard solution.
 
-Outputs
+# Returns
+- `X`, `Y`: the functions at the 101 values of μ from 0 to 1 in steps of 0.01.
+- `num_iterations`: iterations performed.
 
-X::Vector{Float64}
-Values of the X-function at 101 evenly spaced μ values from 0.00 to 1.00 in steps of 0.01.
+Throws an error if `τ > 2`, if Ψ is negative for any μ, or if the integral of Ψ over μ exceeds 0.5.
 
-Y::Vector{Float64}
-Values of the Y-function at the same μ grid.
+# References
+Chandrasekhar, S. (1960). *Radiative Transfer*. Dover.
 
-num_iterations::Int
-Number of iterations performed before convergence.
-
-Notes
-
-If ncase != 0, a conservative case is assumed and a standard solution is returned.
-The program terminates with an error if:
-- tau1 > 2.0
-- the characteristic function is negative for any μ
-- the integral of the characteristic function exceeds 0.5
-
-References
-
-https://en.wikipedia.org/wiki/Chandrasekhar%27s_X-_and_Y-function
-
-McCullough, E. C., & Porter, W. P. (1971). Computing clear day solar radiation 
-spectra for the terrestrial ecological environment. Ecology, 52(6), 1008–1015.
-     https://doi.org/10.2307/1933806
-
+McCullough, E. C. & Porter, W. P. (1971). Computing clear day solar radiation spectra
+for the terrestrial ecological environment. Ecology 52(6), 1008-1015.
+https://doi.org/10.2307/1933806
 """
 chandrasekhar_XY(τ::Float64, characteristic_function_coeffs::Vector{Float64}, case_number::Int) =
     chandrasekhar_xy!(init_chandrasekhar_XY_buffers(), τ, characteristic_function_coeffs, case_number)

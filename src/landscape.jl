@@ -1,9 +1,28 @@
+"""
+    AbstractTerrain
+
+Supertype of terrain descriptions passed to [`solar_radiation`](@ref) as `solar_terrain`.
+"""
 abstract type AbstractTerrain end
 
 """
-    SolarTerrain
+    SolarTerrain(; elevation, horizon_angles, slope, aspect, albedo, atmospheric_pressure, latitude, longitude)
 
-Terrain configuration for solar radiation computation.
+Site and terrain configuration for [`solar_radiation`](@ref). All angles and lengths are
+`Unitful` quantities.
+
+# Keywords
+- `elevation`: height above sea level, sets the elevation correction of the optical depths.
+- `horizon_angles`: horizon elevation angles, at equal azimuth steps clockwise from north
+  (24 values give steps of 15°). Direct radiation is zero when the sun is below the horizon angle.
+- `slope`: slope of the surface, from horizontal.
+- `aspect`: azimuth the slope faces, clockwise from north.
+- `albedo`: reflectance of the ground, from 0 to 1.
+- `atmospheric_pressure`: pressure at the site, scales the Rayleigh optical depth. It can be calculated from the elevation
+  with `atmospheric_pressure` of [FluidProperties.jl](https://github.com/BiophysicalEcology/FluidProperties.jl).
+- `latitude`: latitude, positive north.
+- `longitude`: stored for reference, not used in the calculation. Solar time is set by
+  the `longitude_correction` or `timezone_offset` keywords of `solar_radiation`.
 """
 @kwdef struct SolarTerrain{E,HA,S,As,Al,AP,La,Lo} <: AbstractTerrain
     elevation::E
@@ -16,6 +35,11 @@ Terrain configuration for solar radiation computation.
     longitude::Lo
 end
 
+"""
+    AbstractSolarRadiation
+
+Supertype of solar radiation models, such as [`SolarProblem`](@ref).
+"""
 abstract type AbstractSolarRadiation end
 
 """
@@ -54,26 +78,33 @@ struct SpectralParams{
 end
 
 """
-    SolarProblem
+    SolarProblem(; kw...)
 
-Solar radiation model parameters.
+Clear-sky solar radiation model for [`solar_radiation`](@ref), after McCullough & Porter (1971).
 
-# Keyword Arguments
+# Keywords
+- `solar_geometry_model::AbstractSolarGeometryModel=McCulloughPorterSolarGeometry()`: orbit and declination model.
+- `diffuse_model::AbstractDiffuseModel=DaveFurukawaScattering()`: one of [`DaveFurukawaScattering`](@ref),
+  [`ChandrasekharScattering`](@ref), [`NoScattering`](@ref).
+- `precipitable_water=1.0u"cm"`: precipitable water of the whole atmospheric column, a length
+  (0.1 cm very dry, 1 cm moist, 2 cm humid tropical).
+- `mixing_ratio_height=25.0u"km"`: sea-level meteorological range, the visibility at 0.55 μm.
+- `wavelength_count=111`: number of wavelength intervals used.
+- `wavelengths`: wavelength of each interval, in `nm`.
+- `ozone_column`: total ozone in cm by latitude band (19 bands of 10°, from 90°S) and month, a 19×12 matrix.
+- `rayleigh_optical_depth`, `ozone_optical_depth`, `aerosol_optical_depth`, `water_optical_depth`:
+  sea-level vertical optical depths at each wavelength. The ozone depth applies at the reference
+  column of 0.34 cm, and the water depth at 1 cm of precipitable water.
+- `solar_spectral_irradiance`: extraterrestrial solar spectrum at each wavelength. The values are
+  stored ten times the tabulated ones, with a nominal unit of W m⁻² nm⁻¹, and the calculation divides
+  by 1000 to give W m⁻² nm⁻¹.
 
-- `precipitable_water::Real=1`: Precipitable water in cm for atmospheric column (e.g. 0.1: dry, 1.0: moist, 2.0: humid).
-- `diffuse_model::AbstractDiffuseModel=DaveFurukawaScattering()`: diffuse radiation model,
-  one of [`DaveFurukawaScattering`](@ref), [`ChandrasekharScattering`](@ref), [`NoScattering`](@ref).
-- `mixing_ratio_height::Quantity=25.0u"km"`: Mixing ratio height of the atmosphere.
-- `wavelength_count::Integer=111`: Maximum number of wavelength intervals.
-- `wavelengths::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
-- `ozone_column::Matrix{Float64}`: Ozone column depth table indexed by latitude band and month (size 19×12).
-- `rayleigh_optical_depth`, `ozone_optical_depth`, `aerosol_optical_depth`, `water_optical_depth`: Vectors of optical depths per wavelength.
-- `solar_spectral_irradiance::Vector{Quantity}`: Solar spectral irradiance per wavelength bin.
+The default tables are described in the manual, see `SolarRadiation.DEFAULT_WAVELENGTHS` and the other `DEFAULT_*` constants.
 """
 @kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI} <: AbstractSolarRadiation
     solar_geometry_model::SGM = McCulloughPorterSolarGeometry()
     diffuse_model::DM = DaveFurukawaScattering()
-    precipitable_water::PW = 1.0 # precipitable cm H2O in air column 0.1 = very dry; 1 = moist air conditions; 2 = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
+    precipitable_water::PW = 1.0u"cm" # precipitable water in air column 0.1 cm = very dry; 1 cm = moist air conditions; 2 cm = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
     mixing_ratio_height::MRH = 25.0u"km" # mixing ratio height of the atmosphere
     wavelength_count::WC = 111 # Maximum number of wavelength intervals
     wavelengths::WL = DEFAULT_WAVELENGTHS # Vector of wavelength bins (e.g. in `nm`)
