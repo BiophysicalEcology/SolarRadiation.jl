@@ -1,0 +1,10 @@
+[deps]
+ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+RRTMGP = "a01a1ee8-cea4-48fc-987c-fc7878d79da1"
+SolarRadiation = "d01e3663-6acb-4162-92ee-c50acb918cac"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+
+[sources]
+SolarRadiation = {path = "../.."}

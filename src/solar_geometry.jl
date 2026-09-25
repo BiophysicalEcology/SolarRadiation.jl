@@ -20,6 +20,11 @@ function hour_angle(t::Real, longitude_correction::Real=0)
     return h, tsn
 end
 
+"""
+    AbstractSolarGeometryModel
+
+Supertype of solar geometry models, used by [`solar_geometry`](@ref).
+"""
 abstract type AbstractSolarGeometryModel end
 
 """
@@ -41,8 +46,7 @@ Solar geometry model based on McCullough & Porter (1971).
 - `orbital_eccentricity`: Earth's orbital eccentricity (default: 0.0167238)
 - `declination_amplitude`: Solar declination amplitude (default: 0.39784993)
 
-Note: `orbital_angular_frequency` is now computed dynamically based on the year length
-to handle leap years and non-standard calendars. Use `orbital_angular_frequency(days_in_year)`.
+The orbital angular frequency depends on the year length, see [`orbital_angular_frequency`](@ref).
 """
 @kwdef struct McCulloughPorterSolarGeometry{RD,OE,DA} <: AbstractSolarGeometryModel
     reference_day::RD = 80
@@ -50,6 +54,7 @@ to handle leap years and non-standard calendars. Use `orbital_angular_frequency(
     declination_amplitude::DA = 0.39784993
 end
 
+solar_geometry(::McCulloughPorterSolarGeometry, ::Missing; kwargs...) = missing
 """
     solar_geometry(model::McCulloughPorterSolarGeometry, latitude; day_of_year, hour_angle, days_in_year=365)
 
@@ -73,7 +78,6 @@ NamedTuple with:
 # Reference
 McCullough & Porter (1971)
 """
-solar_geometry(::McCulloughPorterSolarGeometry, ::Missing; kwargs...) = missing
 function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
     day_of_year::Real,
     hour_angle::Quantity,
