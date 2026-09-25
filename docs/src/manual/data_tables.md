@@ -16,7 +16,8 @@ using CairoMakie, SolarRadiation, Unitful
 | `DEFAULT_RAYLEIGH_OPTICAL_DEPTH` | `rayleigh_optical_depth` | molecular scattering, at 101.3 kPa | Elterman (1968, 1970) |
 | `DEFAULT_OZONE_OPTICAL_DEPTH` | `ozone_optical_depth` | ozone absorption, for a column of 0.34 cm | Elterman (1968, 1970) |
 | `DEFAULT_AEROSOL_OPTICAL_DEPTH` | `aerosol_optical_depth` | aerosols, for a visibility of 25 km | Elterman (1968, 1970) |
-| `DEFAULT_WATER_OPTICAL_DEPTH` | `water_optical_depth` | water vapour, for 1 cm of precipitable water | Gates and Harrop (1963) |
+| `DEFAULT_WATER_OPTICAL_DEPTH` | `water_optical_depth` | water vapour, for 1 mm of precipitable water | Gates and Harrop (1963), Table II |
+| `DEFAULT_MIXED_GAS_ABSORPTION` | `mixed_gas_absorption` | O₂ and CO₂ absorption coefficients | Bird and Riordan (1986) |
 | `DEFAULT_OZONE_COLUMN` | `ozone_column` | ozone column in cm by 10° latitude band and month | Robinson (1966) |
 | `DEFAULT_DIFFUSE_SKY_IRRADIANCE`, `DEFAULT_DIFFUSE_GROUND_REFLECTED`, `DEFAULT_SPHERICAL_ALBEDO` | fields of [`DaveFurukawaScattering`](@ref) | ultraviolet diffuse radiation | Dave and Furukawa (1966) |
 

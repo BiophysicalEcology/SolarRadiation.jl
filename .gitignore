@@ -8,3 +8,4 @@ docs/Manifest.toml
 docs/data/
 .claude/settings.json
 docs/page_times.txt
+test/R/Rplots.pdf

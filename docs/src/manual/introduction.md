@@ -71,6 +71,22 @@ solar_radiation(SolarProblem(; diffuse_model = ChandrasekharScattering()); solar
 
 The types, functions and their arguments are in the [API](../api.md).
 
+## Related packages
+
+Two packages of the [Climate Modeling Alliance](https://clima.caltech.edu) cover parts of the same calculation for
+climate models:
+
+- [Insolation.jl](https://github.com/CliMA/Insolation.jl) gives the position of the sun and the irradiance at the top of
+  the atmosphere, from the date and time in UTC and the longitude. It includes the equation of time and, for past
+  climates, orbital parameters from Laskar et al. (2004), but not the atmosphere or terrain. Its zenith and azimuth
+  angles agree with [`solar_geometry`](@ref) to about 0.15°. SolarRadiation.jl uses local solar time, without the
+  equation of time.
+- [RRTMGP.jl](https://github.com/CliMA/RRTMGP.jl) calculates longwave and shortwave radiative transfer through the
+  layers of an atmospheric column, with correlated-k gas absorption, clouds and aerosols (Pincus et al. 2019). It needs
+  profiles of temperature, pressure and gas concentrations, takes the sun position from the host model, and gives
+  broadband fluxes and heating rates. SolarRadiation.jl needs only column totals, and gives spectra and the effects of
+  terrain. The water vapour optical depths were checked against RRTMGP.jl.
+
 ## References
 
 McCullough EC, Porter WP (1971), Kearney MR, Porter WP (2017) and the other references are listed in the

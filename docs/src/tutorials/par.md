@@ -139,8 +139,8 @@ Markdown.parse(join(["| Quantity | Minimum | Maximum |"; "| :--- | ---: | ---: |
     "| Photons per joule of PAR (µmol J⁻¹) | $(round(photons_low / u"μmol/J"; digits = 2)) | $(round(photons_high / u"μmol/J"; digits = 2)) |"], Char(10)))
 ```
 
-The 45 % is a rule of thumb from measurements, and here it is higher than the fraction of the model, so the fixed fraction overestimates the PAR of the
-model, by 15 to 30 % on these days. The fraction of the model is close to that at the top of the atmosphere, in the solar spectrum of the model:
+The 45 % is a rule of thumb from measurements, and it lies within the range of the fraction of the model, so on these days the fixed fraction is
+within −7 to +6 % of the PAR of the model. At the top of the atmosphere, in the solar spectrum of the model, the fraction is lower:
 
 ```@example par
 in_band = findall(w -> 400u"nm" <= w <= 700u"nm", wavelengths)
@@ -148,9 +148,9 @@ solar = SolarProblem().solar_spectral_irradiance
 round(trapezoid(wavelengths[in_band], solar[in_band]) / trapezoid(wavelengths, solar); digits = 3)
 ```
 
-That the atmosphere hardly changes the fraction is a reminder that the water vapour absorption of the model, which removes infrared light, is tabulated at only
-a few wavelengths (see [Data tables](../manual/data_tables.md)). The comparison is therefore between two approximations, and
-the size of the difference depends on the fraction that is assumed.
+The atmosphere raises the fraction because water vapour removes infrared light, so the fraction, and the error of a fixed one, depend on the
+precipitable water (see the table below). The comparison is between two approximations, and the size of the difference depends on the fraction
+that is assumed.
 
 The spectrum also separates the direct and the diffuse PAR, which a fixed fraction of the global radiation cannot do. They are needed for the
 photosynthesis of the sunlit and shaded leaves of a canopy.

@@ -52,9 +52,9 @@ const MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR = 0.03
 # McCullough & Porter (1971), used with Elterman tabulations
 const REFERENCE_OZONE_DEPTH_CM = 0.34
 
-# Reference precipitable water of the air column, for the tabulated water vapour optical depths
-# McCullough & Porter (1971)
-const REFERENCE_PRECIPITABLE_WATER = 1.0u"cm"
+# Reference precipitable water for the tabulated water vapour optical depths, the c₁ of Gates & Harrop (1963),
+# defined by ln T = -c₁√w with w in mm. McCullough & Porter (1971) took them as for 1 cm.
+const REFERENCE_PRECIPITABLE_WATER = 1.0u"mm"
 
 # Maximum optical depth clamp (numerical stability)
 const MAX_OPTICAL_DEPTH = 80.0
@@ -133,14 +133,26 @@ const DEFAULT_AEROSOL_OPTICAL_DEPTH = [0.269904738, 0.266147825, 0.262442906, 0.
         0.010882215, 0.009561062, 0.007961182, 0.006438984, 0.005558204, 0.006133532, 0.009277754
     ]
 
+# Gates & Harrop (1963) Table II, c₁ for w in mm, interpolated. The centres of the strong H₂O bands near 1.4, 1.9 and
+# 2.7 µm, which they could not measure, are opaque. The O₂ and CO₂ bands at 1.26–1.28 and 2.0–2.05 µm are in
+# DEFAULT_MIXED_GAS_ABSORPTION instead. Validated against RRTMGP, see test/RRTMGP/water_bands.jl.
 const DEFAULT_WATER_OPTICAL_DEPTH = [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0.123, 0.117, 0.1, 0.23, 0.174, 0.058, 0, 0.024, 0.027,
-        0.036, 0.215, 0.25, 0.136, 0.058, 0.047, 0.036, 0.042, 0.098, 0.044, 0, 0.038,
-        0.83, 0, 0, 0.38, 0.289, 0.258, 0.173, 0.008, 0, 0, 0, 0, 0, 0, 0, 0, 0.57, 0.76, 0,
-        0.185, 0.291, 0.178, 0.196, 0.112, 0.075, 0.074, 0.07, 0.007, 0, 0, 0, 0.086,
-        0.122, 0.132, 0.14, 0.207, 0.259, 0, 0, 0, 0.549, 0.297, 0.462, 0.52, 0.374, 0.222,
-        0.614, 0.058, 0.038, 0.03, 0.04, 0.16
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0.123, 0.117, 0.1, 0.23, 0.174, 0.058, 0, 0.0244, 0.0392, 0.0361, 0.222, 0.254, 0.161,
+        0.0584, 0.0489, 0.0366, 0.0378, 0, 0, 0.0498, 0.0884, 0.837, MAX_OPTICAL_DEPTH, MAX_OPTICAL_DEPTH,
+        0.377, 0.275, 0.258, 0.182, 0.0289, 0.0381, 0.033, 0.0339, 0.0335, 0.0345, 0.0349, 0.035, 0.0535,
+        0.218, 0.762, MAX_OPTICAL_DEPTH, 0.236, 0, 0, 0, 0.115, 0.0757, 0.0737, 0.0701, 0.0628, 0.0646, 0.066,
+        0.102, 0.113, 0.121, 0.131, 0.14, 0.207, 0.259, MAX_OPTICAL_DEPTH, MAX_OPTICAL_DEPTH,
+        MAX_OPTICAL_DEPTH, 0.549, 0.295, 0.446, 0.49, 0.369, 0.227, 0.0691, 0.0604, 0.032, 0.0391, 0.143,
+        0.219
+    ]
+
+# Absorption coefficients of the uniformly mixed gases (O₂, CO₂), Bird & Riordan (1986), interpolated
+const DEFAULT_MIXED_GAS_ABSORPTION = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.217, 0.16, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15.8, 10.6, 0.565, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     ]
 
 const DEFAULT_SOLAR_SPECTRAL_IRRADIANCE = [

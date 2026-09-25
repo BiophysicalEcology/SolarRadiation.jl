@@ -135,26 +135,29 @@ end
 """
     spectral_optical_depth(wavelength_index, atmospheric_pressure, mixing_ratio_height,
         rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth,
-        elevation_factors, ozone_depth, air_mass, precipitable_water)
+        mixed_gas_absorption, elevation_factors, ozone_depth, air_mass, precipitable_water)
 
-Rayleigh and total optical depth at one wavelength (eqs. 13-14 McCullough & Porter 1971).
+Rayleigh and total optical depth at one wavelength (eqs. 13-14 McCullough & Porter 1971), with the
+absorption of the uniformly mixed gases of Bird & Riordan (1986, eq. 2-11).
 
 Returns `(; rayleigh, total)`.
 """
 function spectral_optical_depth(
     wavelength_index, atmospheric_pressure, mixing_ratio_height,
     rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth,
-    elevation_factors, ozone_depth, air_mass, precipitable_water,
+    mixed_gas_absorption, elevation_factors, ozone_depth, air_mass, precipitable_water,
 )
     n, P, MR₀, m_Zₐ, cmH2O = wavelength_index, atmospheric_pressure, mixing_ratio_height, air_mass, precipitable_water
-    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
+    τR, τO, τA, τW, aM = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth, mixed_gas_absorption
     A₁, A₂, A₃, A₄ = elevation_factors.molecular, elevation_factors.aerosol, elevation_factors.ozone, elevation_factors.water
 
     λτR = (P / REFERENCE_PRESSURE) * τR[n] * A₁
     λτA = (REFERENCE_VISIBILITY / MR₀) * τA[n] * A₂
     λτO = (ozone_depth / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A₃
     λτW = τW[n] * sqrt(m_Zₐ * uconvert(NoUnits, cmH2O / REFERENCE_PRECIPITABLE_WATER) * A₄)  # eq. 13
-    λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW  # eq. 14
+    kM = aM[n] * m_Zₐ * uconvert(NoUnits, P / REFERENCE_PRESSURE)
+    λτM = 1.41kM / (1 + 118.3kM)^0.45  # Bird & Riordan (1986) eq. 2-11
+    λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW + λτM  # eq. 14
     λτ = min(λτ, MAX_OPTICAL_DEPTH)  # avoids numerical issues at low sun angles
     return (; rayleigh=λτR, total=λτ)
 end
@@ -176,7 +179,7 @@ function direct_irradiance(
     λτ, λτR, m_Zₐ = total_optical_depth, rayleigh_optical_depth, air_mass
 
     part1 = Sλ_n * ar² * cz
-    part2 = λτ > 0.0 ? exp(-λτ) : 0.0
+    part2 = exp(-λτ)
 
     if part2 < MIN_IRRADIANCE
         Iλ = 0.0u"W/m^2/nm"
@@ -308,14 +311,14 @@ function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below
     ∫G, ∫Iᵣ, ∫I, ∫D = buffers.global_integral, buffers.rayleigh_integral, buffers.direct_integral, buffers.diffuse_integral
     Gλ, Iᵣλ, Iλ, Dλ = buffers.global_spectrum, buffers.rayleigh_spectrum, buffers.direct_spectrum, buffers.diffuse_spectrum
     (; wavelength_count, atmospheric_pressure, mixing_ratio_height, rayleigh_optical_depth,
-       ozone_optical_depth, aerosol_optical_depth, water_optical_depth, wavelengths,
+       ozone_optical_depth, aerosol_optical_depth, water_optical_depth, mixed_gas_absorption, wavelengths,
        ozone_depth, precipitable_water, elevation_factors, diffuse_model, air_mass) = params
     Sλ, ar², cz = params.solar_spectral_irradiance, params.sun_distance_factor, params.cosine_zenith
 
     for n in 1:wavelength_count
         τ = spectral_optical_depth(n, atmospheric_pressure, mixing_ratio_height,
                                    rayleigh_optical_depth, ozone_optical_depth,
-                                   aerosol_optical_depth, water_optical_depth,
+                                   aerosol_optical_depth, water_optical_depth, mixed_gas_absorption,
                                    elevation_factors, ozone_depth, air_mass, precipitable_water)
 
         direct = direct_irradiance(Sλ[n], ar², cz, τ.total, τ.rayleigh, air_mass)
@@ -354,9 +357,9 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
     # Unpack model parameters with short aliases for equations
     (; solar_geometry_model, precipitable_water, diffuse_model, mixing_ratio_height,
        wavelength_count, wavelengths, ozone_column, rayleigh_optical_depth, ozone_optical_depth,
-       aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance) = solar_model
+       aerosol_optical_depth, water_optical_depth, mixed_gas_absorption, solar_spectral_irradiance) = solar_model
     nmax, λ = wavelength_count, wavelengths
-    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
+    τR, τO, τA, τW, aM = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth, mixed_gas_absorption
     Sλ = solar_spectral_irradiance
     cmH2O, MR₀ = precipitable_water, mixing_ratio_height
 
@@ -424,7 +427,7 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
 
                 # Compute spectral irradiance
                 params = SpectralParams(
-                    nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
+                    nmax, P, MR₀, τR, τO, τA, τW, aM, Sλ, λ, ar², cz, intcz, m_Zₐ,
                     ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z
                 )
                 compute_spectral_irradiance!(buffers, params, alt < ahoriz)

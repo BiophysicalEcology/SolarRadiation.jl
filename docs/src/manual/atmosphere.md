@@ -39,20 +39,24 @@ air mass of the sun (eq. 14 of McCullough and Porter 1971):
 
 The sea-level optical depths ``{}_\lambda\tau`` are the tables of the [`SolarProblem`](@ref). They are for a standard atmosphere with
 a pressure ``P_0`` of 101.3 kPa, a sea-level visibility ``MR_0`` (the meteorological range at 0.55 μm) of 25 km, a total
-ozone column ``X`` of 0.34 cm and 1 cm of precipitable water ``w``, and are scaled to a specific location as follows:
+ozone column ``X`` of 0.34 cm and 1 mm of precipitable water ``w``, and are scaled to a specific location as follows:
 
 - the Rayleigh (molecular) depth ``\tau_R`` by the ratio of the pressure ``P`` of the site to ``P_0``;
 - the aerosol depth ``\tau_A`` by the ratio of 25 km to the visibility `mixing_ratio_height` of the model;
 - the ozone depth ``\tau_O`` by the ratio of the ozone column of the latitude and month to 0.34 cm;
 - the water vapour depth ``\tau_W`` by the square root of the product of the air mass and the precipitable water
-  `precipitable_water` of the model, in cm. Water vapour is absorbing, so it is not proportional to the amount.
+  `precipitable_water` of the model, in mm. Water vapour is absorbing, so it is not proportional to the amount.
+  Gates and Harrop (1963) define the coefficients for ``w`` in mm; McCullough and Porter (1971) took them as for 1 cm;
+- the absorption by the uniformly mixed gases, O₂ near 1.27 μm and CO₂ near 2.0 μm, with the coefficients ``a_M`` of Bird
+  and Riordan (1986), as ``\tau_M = 1.41\,a_M M / (1 + 118.3\,a_M M)^{0.45}``, with ``M = m(Z_a)\,P/P_0``. It depends on the
+  air mass and pressure, not on the water vapour.
 
 The factors ``A_R``, ``A_A`` and ``A_O`` adjust each depth to the elevation of the site, and ``A_W`` is 1.
 The total optical depth is limited to 80. [`SolarRadiation.spectral_optical_depth`](@ref) does the calculation
 at one wavelength.
 
 The default tables of ``\tau_R``, ``\tau_A``, ``\tau_O`` and ``\tau_W`` are from Elterman (1968, 1970) for Rayleigh, ozone and
-aerosol scattering, and from Gates and Harrop (1963) for water vapour:
+aerosol scattering, and from Table II of Gates and Harrop (1963) for water vapour:
 
 ```@example atmosphere
 model = SolarProblem(; diffuse_model = ChandrasekharScattering())
@@ -68,12 +72,14 @@ panels = (
 for (i, (title, depth)) in enumerate(panels)
     ax = Axis(fig[div(i - 1, 2) + 1, mod(i - 1, 2) + 1]; title, xlabel = "Wavelength (nm)", ylabel = "Optical depth")
     lines!(ax, ustrip.(wavelength), depth; linewidth = 2)
+    title == "Water vapour" && ylims!(ax, 0, 1)
 end
 fig
 ```
 
 Ozone absorbs ultraviolet light strongly, below about 330 nm, and Rayleigh scattering is strongest at short wavelengths, while
-the water vapour bands are in the infrared.
+the water vapour bands are in the infrared. The water vapour samples in the strong bands near 1.4, 1.9 and 2.7 μm are
+opaque (80, the limit), and are cut off in the figure.
 
 ## Elevation
 

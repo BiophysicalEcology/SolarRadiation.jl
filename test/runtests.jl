@@ -8,3 +8,4 @@ end
 @safetestset "Diffuse models" begin include("diffuse.jl") end
 @safetestset "Latitudes" begin include("latitudes.jl") end
 @safetestset "Reused output arrays" begin include("reuse.jl") end
+@safetestset "Transmission" begin include("transmission.jl") end

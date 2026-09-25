@@ -52,7 +52,7 @@ into a single object passed to `compute_spectral_irradiance!` and `diffuse_irrad
 """
 struct SpectralParams{
     DM<:AbstractDiffuseModel,
-    Tp,Tmr,Ttr,Tto,Tta,Ttw,
+    Tp,Tmr,Ttr,Tto,Tta,Ttw,Tmg,
     Tsl,Tl,Tar,Tcz,Tmz,
     Tod,Tch,Tef,Ta,Tz
 }
@@ -63,6 +63,7 @@ struct SpectralParams{
     ozone_optical_depth::Tto
     aerosol_optical_depth::Tta
     water_optical_depth::Ttw
+    mixed_gas_absorption::Tmg
     solar_spectral_irradiance::Tsl
     wavelengths::Tl
     sun_distance_factor::Tar
@@ -94,14 +95,16 @@ Clear-sky solar radiation model for [`solar_radiation`](@ref), after McCullough 
 - `ozone_column`: total ozone in cm by latitude band (19 bands of 10°, from 90°S) and month, a 19×12 matrix.
 - `rayleigh_optical_depth`, `ozone_optical_depth`, `aerosol_optical_depth`, `water_optical_depth`:
   sea-level vertical optical depths at each wavelength. The ozone depth applies at the reference
-  column of 0.34 cm, and the water depth at 1 cm of precipitable water.
+  column of 0.34 cm, and the water depth at 1 mm of precipitable water.
+- `mixed_gas_absorption`: absorption coefficients of the uniformly mixed gases (O₂, CO₂) at each wavelength,
+  after Bird & Riordan (1986).
 - `solar_spectral_irradiance`: extraterrestrial solar spectrum at each wavelength. The values are
   stored ten times the tabulated ones, with a nominal unit of W m⁻² nm⁻¹, and the calculation divides
   by 1000 to give W m⁻² nm⁻¹.
 
 The default tables are described in the manual, see `SolarRadiation.DEFAULT_WAVELENGTHS` and the other `DEFAULT_*` constants.
 """
-@kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI} <: AbstractSolarRadiation
+@kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,MGA,SSI} <: AbstractSolarRadiation
     solar_geometry_model::SGM = McCulloughPorterSolarGeometry()
     diffuse_model::DM = DaveFurukawaScattering()
     precipitable_water::PW = 1.0u"cm" # precipitable water in air column 0.1 cm = very dry; 1 cm = moist air conditions; 2 cm = humid tropical conditions (note this is for the whole atmospheric profile not just near the ground)
@@ -113,5 +116,6 @@ The default tables are described in the manual, see `SolarRadiation.DEFAULT_WAVE
     ozone_optical_depth::OOD = DEFAULT_OZONE_OPTICAL_DEPTH # vector of optical depths per wavelength for ozone
     aerosol_optical_depth::AOD = DEFAULT_AEROSOL_OPTICAL_DEPTH # vector of optical depths per wavelength for aerosols
     water_optical_depth::WOD = DEFAULT_WATER_OPTICAL_DEPTH # vector of optical depths per wavelength for water vapor
+    mixed_gas_absorption::MGA = DEFAULT_MIXED_GAS_ABSORPTION # vector of absorption coefficients per wavelength for O₂ and CO₂
     solar_spectral_irradiance::SSI = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
 end
