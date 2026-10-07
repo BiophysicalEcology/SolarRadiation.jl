@@ -5,7 +5,7 @@ using ModelParameters
 using SpecialFunctions, StaticArrays, Dates
 
 export SolarProblem, SolarTerrain, SpectralParams
-export NoScattering, DaveFurukawaScattering, ChandrasekharScattering
+export AbstractDiffuseModel, NoScattering, DaveFurukawaScattering, ChandrasekharScattering
 
 export scattered_radiation
 export elevation_correction
@@ -15,8 +15,11 @@ export allocate_output_arrays, allocate_buffers
 
 include("constants.jl")
 include("elevation_correction.jl")
+include("diffuse/abstract.jl")
+include("diffuse/no_scattering.jl")
+include("diffuse/dave_furukawa.jl")
+include("diffuse/chandrasekhar.jl")
 include("landscape.jl")
-include("scattered_uv.jl")
 include("solar_geometry.jl")
 include("solar_radiation.jl")
 
