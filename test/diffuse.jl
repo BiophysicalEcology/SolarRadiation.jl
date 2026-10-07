@@ -24,10 +24,20 @@ models = (NoScattering(), DaveFurukawaScattering(), ChandrasekharScattering())
         @test all(iszero, out.diffuse_spectra[:, 12:end])
     end
 
+    @testset "Dave-Furukawa agrees with Chandrasekhar where ozone absorbs little" begin
+        wavelengths = ustrip.(u"nm", SolarProblem().wavelengths)
+        uv = findall(w -> 330 <= w <= 360, wavelengths)
+        noon = 13 # first day, 12:00
+        dave_furukawa = run(SolarProblem(; diffuse_model=DaveFurukawaScattering()))
+        chandrasekhar = run(SolarProblem(; diffuse_model=ChandrasekharScattering()))
+        @test ustrip.(u"W/m^2/nm", dave_furukawa.diffuse_spectra[noon, uv]) ≈
+            ustrip.(u"W/m^2/nm", chandrasekhar.diffuse_spectra[noon, uv]) rtol = 0.05
+    end
+
     @testset "model owns its data" begin
         default = run(SolarProblem(; diffuse_model=DaveFurukawaScattering()))
-        ssa = fill(0.5, length(SolarRadiation.DEFAULT_SINGLE_SCATTERING_ALBEDO))
-        custom = run(SolarProblem(; diffuse_model=DaveFurukawaScattering(; single_scattering_albedo=ssa)))
+        spherical = fill(0.5, length(SolarRadiation.DEFAULT_SPHERICAL_ALBEDO))
+        custom = run(SolarProblem(; diffuse_model=DaveFurukawaScattering(; spherical_albedo=spherical)))
         @test custom.diffuse_spectra != default.diffuse_spectra
     end
 
