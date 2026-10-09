@@ -12,15 +12,26 @@ for the terrestrial ecological environment. Ecology 52(6), 1008-1015, eq. 15.
 struct ChandrasekharScattering <: AbstractDiffuseModel end
 
 function diffuse_irradiance(::ChandrasekharScattering, wavelength_index, rayleigh_optical_depth, params, buffers)
-    n, λτR = wavelength_index, rayleigh_optical_depth
-    λτR < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
-    cz, intcz, Sλ = params.cosine_zenith, params.cosine_zenith_index, params.solar_spectral_irradiance
-    ar², m_Zₐ, A = params.sun_distance_factor, params.air_mass, params.albedo
-    (; polarization_l, polarization_r, s_function) = scattered_radiation!(buffers.gamma, λτR)
-    γₗ, γᵣ, s̄ = polarization_l, polarization_r, s_function
-    I₀_λ = cz * Sλ[n] * ar² / 1000.0
-    return (((float(γₗ[intcz]) + float(γᵣ[intcz])) / (2.0 * (1.0 - A * float(s̄))))
-            - exp(-float(λτR) * m_Zₐ)) * I₀_λ
+    rayleigh_optical_depth < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
+    (; solar_spectral_irradiance, sun_distance_factor, cosine_zenith, cosine_zenith_index, air_mass, albedo) = params
+    (; polarization_parallel, polarization_perpendicular, spherical_albedo) =
+        scattered_radiation!(buffers.gamma, rayleigh_optical_depth)
+
+    n = wavelength_index
+    i = cosine_zenith_index
+    λτR = rayleigh_optical_depth
+    Sλ = solar_spectral_irradiance
+    ar² = sun_distance_factor
+    cosZ = cosine_zenith
+    m_Zₐ = air_mass
+    A = albedo
+    γₗ = polarization_parallel
+    γᵣ = polarization_perpendicular
+    s̄ = spherical_albedo
+
+    I₀λ = Sλ[n] * ar² * cosZ # eq. 1 in McCullough & Porter (1971)
+    Dλ = I₀λ * ((γₗ[i] + γᵣ[i]) / (2(1 - A * s̄)) - exp(-λτR * m_Zₐ)) # eq. 15
+    return Dλ
 end
 
 function allocate_buffers(nmax, ::ChandrasekharScattering)
@@ -47,13 +58,14 @@ function allocate_scattered_radiation()
 end
 
 """
-    scattered_radiation(optical_thickness) -> (; polarization_l, polarization_r, s_function)
+    scattered_radiation(optical_thickness) -> (; polarization_parallel, polarization_perpendicular, spherical_albedo)
     scattered_radiation!(buffers, optical_thickness)
 
 Functions of eq. 15 in McCullough & Porter (1971) for a Rayleigh atmosphere of the given
-optical thickness (up to 2.0): `polarization_l` and `polarization_r` are γₗ and γᵣ, for the
-two polarization directions, on the 101-point μ grid; `s_function` (s̄) depends on
-optical thickness only.
+optical thickness (up to 2.0): `polarization_parallel` and `polarization_perpendicular` are γₗ and γᵣ,
+for light polarized parallel and perpendicular to the meridian plane, on the 101-point μ grid;
+`spherical_albedo` is s̄, the fraction of ground-reflected radiation scattered back down, and depends
+on optical thickness only.
 """
 scattered_radiation(optical_thickness::Float64) =
     scattered_radiation!(allocate_scattered_radiation(), optical_thickness)
@@ -62,7 +74,7 @@ function scattered_radiation!(buffers, optical_thickness::Float64)
     τ = optical_thickness
     # Large arrays (mutable, normal)
     (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, chandrasekhar_XY_buffers) = buffers
-    AI = buffers.auxiliary_terms  # short alias for the math below
+    AI = buffers.auxiliary_terms
 
     # Set up μ array
     μ[1] = 0.0
@@ -172,7 +184,7 @@ function scattered_radiation!(buffers, optical_thickness::Float64)
         γᵣ[i] = AI[22] * (X2[i] + Y2[i]) - μ[i] * AI[23] * (X2[i] - Y2[i])
     end
 
-    return (; polarization_l=γₗ, polarization_r=γᵣ, s_function=s̄)
+    return (; polarization_parallel=γₗ, polarization_perpendicular=γᵣ, spherical_albedo=s̄)
 end
 
 function init_chandrasekhar_XY_buffers()
@@ -691,10 +703,18 @@ Returns `(converged, num_iterations)`.
     simpson_weights, beam_transmission, sum_integrand, difference_integrand,
     X_out, Y_out, X_update, Y_update,
 )
-    Xₚ, Yₚ = previous_X, previous_Y
-    μ, Ψ, w, E = direction_cosines, characteristic_function, simpson_weights, beam_transmission
-    I₊, I₋ = sum_integrand, difference_integrand
-    X, Y, X′, Y′ = X_out, Y_out, X_update, Y_update
+    Xₚ = previous_X
+    Yₚ = previous_Y
+    μ = direction_cosines
+    Ψ = characteristic_function
+    w = simpson_weights
+    E = beam_transmission
+    I₊ = sum_integrand
+    I₋ = difference_integrand
+    X = X_out
+    Y = Y_out
+    X′ = X_update
+    Y′ = Y_update
 
     num_iterations = 1 # Fortran line 362
     temp_c = 0.0

@@ -29,7 +29,9 @@ Check if the sun is above the horizon.
 `true` if sun is above horizon, `false` otherwise.
 """
 function is_sun_up(time_from_noon, sunrise_hour_angle)
-    ts, H₋ = time_from_noon, sunrise_hour_angle
+    ts = time_from_noon
+    H₋ = sunrise_hour_angle
+
     if ts <= 0.0 && abs(ts) > H₋
         return false
     elseif ts > 0.0 && ts >= H₋
@@ -144,16 +146,29 @@ function spectral_optical_depth(
     rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth,
     elevation_factors, ozone_depth, air_mass, precipitable_water,
 )
-    n, P, MR₀, m_Zₐ, cmH2O = wavelength_index, atmospheric_pressure, mixing_ratio_height, air_mass, precipitable_water
-    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
-    A₁, A₂, A₃, A₄ = elevation_factors.molecular, elevation_factors.aerosol, elevation_factors.ozone, elevation_factors.water
+    (; molecular, aerosol, ozone, water) = elevation_factors
+
+    n = wavelength_index
+    P = atmospheric_pressure
+    MR₀ = mixing_ratio_height
+    τR = rayleigh_optical_depth
+    τO = ozone_optical_depth
+    τA = aerosol_optical_depth
+    τW = water_optical_depth
+    A₁ = molecular
+    A₂ = aerosol
+    A₃ = ozone
+    A₄ = water
+    X = ozone_depth
+    m_Zₐ = air_mass
+    w = precipitable_water
 
     λτR = (P / REFERENCE_PRESSURE) * τR[n] * A₁
     λτA = (REFERENCE_VISIBILITY / MR₀) * τA[n] * A₂
-    λτO = (ozone_depth / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A₃
-    λτW = τW[n] * sqrt(m_Zₐ * cmH2O * A₄)  # eq. 13
-    λτ = ((float(λτR) + λτA + λτO) * m_Zₐ) + λτW  # eq. 14
-    λτ = min(λτ, MAX_OPTICAL_DEPTH)  # avoids numerical issues at low sun angles
+    λτO = (X / REFERENCE_OZONE_DEPTH_CM) * τO[n] * A₃
+    λτW = τW[n] * sqrt(m_Zₐ * w * A₄) # eq. 13 in McCullough & Porter (1971)
+    λτ = (λτR + λτA + λτO) * m_Zₐ + λτW # eq. 14
+    λτ = min(λτ, MAX_OPTICAL_DEPTH) # avoids numerical issues at low sun angles
     return (; rayleigh=λτR, total=λτ)
 end
 
@@ -170,21 +185,18 @@ function direct_irradiance(
     solar_spectral_irradiance, sun_distance_factor, cosine_zenith,
     total_optical_depth, rayleigh_optical_depth, air_mass,
 )
-    Sλ_n, ar², cz = solar_spectral_irradiance, sun_distance_factor, cosine_zenith
-    λτ, λτR, m_Zₐ = total_optical_depth, rayleigh_optical_depth, air_mass
+    Sλ = solar_spectral_irradiance
+    ar² = sun_distance_factor
+    cosZ = cosine_zenith
+    λτ = total_optical_depth
+    λτR = rayleigh_optical_depth
+    m_Zₐ = air_mass
 
-    part1 = Sλ_n * ar² * cz
-    part2 = λτ > 0.0 ? exp(-λτ) : 0.0
-
-    if part2 < MIN_IRRADIANCE
-        Iλ = 0.0u"W/m^2/nm"
-    else
-        Iλ = ((ustrip(u"W/m^2/nm", part1) * part2) / 1000.0) * u"W/m^2/nm"
-    end
-
-    Iλ = max(Iλ, MIN_IRRADIANCE * u"W/m^2/nm")
-
-    Iᵣλ = (Sλ_n * ar² * cz) * exp(-float(λτR) * m_Zₐ) / 1000.0
+    I₀λ = Sλ * ar² * cosZ # eq. 1 in McCullough & Porter (1971)
+    T = λτ > 0.0 ? exp(-λτ) : 0.0
+    Iλ = T < MIN_IRRADIANCE ? zero(I₀λ) : I₀λ * T # eq. 10
+    Iλ = max(Iλ, MIN_IRRADIANCE * oneunit(I₀λ))
+    Iᵣλ = I₀λ * exp(-λτR * m_Zₐ)
 
     return (; direct=Iλ, rayleigh=Iᵣλ)
 end
@@ -221,9 +233,16 @@ function trapezoidal_integrate!(
     direct_spectrum, rayleigh_spectrum, diffuse_spectrum, global_spectrum,
     wavelengths, wavelength_index,
 )
-    ∫I, ∫Iᵣ, ∫D, ∫G = direct_integral, rayleigh_integral, diffuse_integral, global_integral
-    Iλ, Iᵣλ, Dλ, Gλ = direct_spectrum, rayleigh_spectrum, diffuse_spectrum, global_spectrum
-    λ, n = wavelengths, wavelength_index
+    ∫I = direct_integral
+    ∫Iᵣ = rayleigh_integral
+    ∫D = diffuse_integral
+    ∫G = global_integral
+    Iλ = direct_spectrum
+    Iᵣλ = rayleigh_spectrum
+    Dλ = diffuse_spectrum
+    Gλ = global_spectrum
+    λ = wavelengths
+    n = wavelength_index
 
     if n == 1
         ∫D[1] = 0.0u"W/m^2"
@@ -273,24 +292,24 @@ end
 
 Calculate sunrise/sunset hour angles (eq.7 McCullough & Porter 1971).
 
-Returns `(; tanδ_tanϕ, H₊, H₋)`:
-- `tanδ_tanϕ`: Product of tangents (used for polar day/night detection)
-- `H₊`: Hour angle at sunset (radians)
-- `H₋`: Hour angle at sunrise (hours)
+Returns `(; cosine_hour_angle_sunset, hour_angle_sunset, hour_angle_sunrise)`:
+- `cosine_hour_angle_sunset`: `-tan δ tan ϕ`, used to detect polar day and night
+- `hour_angle_sunset`: hour angle at sunset (radians)
+- `hour_angle_sunrise`: time of sunrise before solar noon (hours)
 """
 function sunrise_hour_angle(declination, latitude)
-    δ, ϕ = declination, latitude
-    # TODO: this manual ustrip shouldn't be needed — degrees aren't a "real"
-    # unit and `tan(::Quantity{°})` ought to be allocation-free. In practice
-    # it goes through a Unitful conversion path that heap-allocates ~8
-    # intermediate Float64s per call. Worth investigating in Unitful (or
-    # dropping `Quantity{°}` from the SolarTerrain API entirely). Workaround
-    # in the meantime: ustrip ϕ once into Float64 radians.
-    ϕ_rad = ustrip(u"°", ϕ) * (π / 180.0)
-    tanδ_tanϕ = -tan(δ) * tan(ϕ_rad)
-    H₊ = abs(tanδ_tanϕ) >= 1 ? π : abs(acos(tanδ_tanϕ))
+    δ = declination
+    ϕ = latitude
+
+    cosH₊ = -tan(δ) * tan(ϕ) # eq. 7 in McCullough & Porter (1971)
+    H₊ = abs(cosH₊) >= 1 ? float(π) : abs(acos(cosH₊))
     H₋ = 12.0 * H₊ / π
-    return (; tanδ_tanϕ, H₊, H₋)
+
+    return (;
+        cosine_hour_angle_sunset = cosH₊,
+        hour_angle_sunset = H₊,
+        hour_angle_sunrise = H₋,
+    )
 end
 
 """
@@ -301,12 +320,24 @@ Compute spectral irradiance for all wavelengths at a single timestep.
 Modifies `buffers` in place with computed spectral values.
 """
 function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below_horizon)
-    ∫G, ∫Iᵣ, ∫I, ∫D = buffers.global_integral, buffers.rayleigh_integral, buffers.direct_integral, buffers.diffuse_integral
-    Gλ, Iᵣλ, Iλ, Dλ = buffers.global_spectrum, buffers.rayleigh_spectrum, buffers.direct_spectrum, buffers.diffuse_spectrum
+    (; global_integral, rayleigh_integral, direct_integral, diffuse_integral,
+       global_spectrum, rayleigh_spectrum, direct_spectrum, diffuse_spectrum) = buffers
     (; wavelength_count, atmospheric_pressure, mixing_ratio_height, rayleigh_optical_depth,
        ozone_optical_depth, aerosol_optical_depth, water_optical_depth, wavelengths,
-       ozone_depth, precipitable_water, elevation_factors, diffuse_model, air_mass) = params
-    Sλ, ar², cz = params.solar_spectral_irradiance, params.sun_distance_factor, params.cosine_zenith
+       ozone_depth, precipitable_water, elevation_factors, diffuse_model, air_mass,
+       solar_spectral_irradiance, sun_distance_factor, cosine_zenith) = params
+
+    ∫G = global_integral
+    ∫Iᵣ = rayleigh_integral
+    ∫I = direct_integral
+    ∫D = diffuse_integral
+    Gλ = global_spectrum
+    Iᵣλ = rayleigh_spectrum
+    Iλ = direct_spectrum
+    Dλ = diffuse_spectrum
+    Sλ = solar_spectral_irradiance
+    ar² = sun_distance_factor
+    cosZ = cosine_zenith
 
     for n in 1:wavelength_count
         τ = spectral_optical_depth(n, atmospheric_pressure, mixing_ratio_height,
@@ -314,8 +345,9 @@ function compute_spectral_irradiance!(buffers, params::SpectralParams, sun_below
                                    aerosol_optical_depth, water_optical_depth,
                                    elevation_factors, ozone_depth, air_mass, precipitable_water)
 
-        direct = direct_irradiance(Sλ[n], ar², cz, τ.total, τ.rayleigh, air_mass)
-        Iλ[n], Iᵣλ[n] = direct.direct, direct.rayleigh
+        direct = direct_irradiance(Sλ[n], ar², cosZ, τ.total, τ.rayleigh, air_mass)
+        Iλ[n] = direct.direct
+        Iᵣλ[n] = direct.rayleigh
 
         if sun_below_horizon
             Iλ[n] = MIN_IRRADIANCE * u"W/m^2/nm"
@@ -347,30 +379,39 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
     longitude_correction::Real=0.0,
     days_in_year::Real=365,
 )
-    # Unpack model parameters with short aliases for equations
     (; solar_geometry_model, precipitable_water, diffuse_model, mixing_ratio_height,
        wavelength_count, wavelengths, ozone_column, rayleigh_optical_depth, ozone_optical_depth,
        aerosol_optical_depth, water_optical_depth, solar_spectral_irradiance) = solar_model
-    nmax, λ = wavelength_count, wavelengths
-    τR, τO, τA, τW = rayleigh_optical_depth, ozone_optical_depth, aerosol_optical_depth, water_optical_depth
-    Sλ = solar_spectral_irradiance
-    cmH2O, MR₀ = precipitable_water, mixing_ratio_height
-
-    # Unpack terrain
     (; elevation, albedo, atmospheric_pressure, latitude) = solar_terrain
-    ϕ, P, A = latitude, atmospheric_pressure, albedo
 
-    ndays, ntimes = length(days), length(hours)
+    nmax = wavelength_count
+    λ = wavelengths
+    τR = rayleigh_optical_depth
+    τO = ozone_optical_depth
+    τA = aerosol_optical_depth
+    τW = water_optical_depth
+    Sλ = solar_spectral_irradiance
+    w = precipitable_water
+    MR₀ = mixing_ratio_height
+    ϕ = latitude
+    P = atmospheric_pressure
+    A = albedo
+
     elevation_factors = elevation_correction(elevation)
     step = 1
-    H₋, tsn = 0.0, 0.0
+    H₋ = 0.0
+    tsn = 0.0
 
-    for i in 1:ndays
-        for j in 1:ntimes
-            d, t = days[i], hours[j]
+    for i in eachindex(days)
+        for j in eachindex(hours)
+            d = days[i]
+            t = hours[j]
             h, tsn = hour_angle(t, longitude_correction)
-            solar_geom = solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h, days_in_year)
-            δ, z, ar² = solar_geom.solar_declination, solar_geom.zenith_angle, solar_geom.sun_distance_factor
+            (; solar_declination, zenith_angle, sun_distance_factor) =
+                solar_geometry(solar_geometry_model, ϕ; day_of_year=d, hour_angle=h, days_in_year)
+            δ = solar_declination
+            z = zenith_angle
+            ar² = sun_distance_factor
             zsl = z
 
             # Twilight handling
@@ -383,50 +424,50 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             end
 
             # Sunrise/sunset calculation
-            sunrise = sunrise_hour_angle(δ, ϕ)
-            H₋ = sunrise.H₋
+            (; cosine_hour_angle_sunset, hour_angle_sunrise) = sunrise_hour_angle(δ, ϕ)
+            H₋ = hour_angle_sunrise
             sun_up = is_sun_up(t - tsn, H₋)
 
             # 90° = sun-below-horizon sentinel (matches the Vector pre-fill);
             # avoids `Union{Missing, Quantity{°}}` typing of `solar_azimuth`
             # which would force boxing through the slope_zenith_angle call below.
             solar_azimuth = 90.0u"°"
-            if sun_up || sunrise.tanδ_tanϕ == 1
+            if sun_up || cosine_hour_angle_sunset == 1
                 alt = (π / 2 - z)u"rad"
                 solar_azimuth = solar_azimuth_angle(h, ϕ, δ)
                 ahoriz = horizon_angle_at_azimuth(solar_azimuth, solar_terrain.horizon_angles)
 
                 # Slope geometry
-                slope_geom = slope_zenith_angle(z, solar_terrain, solar_azimuth)
-                zsl, czsl = slope_geom.zenith_angle, slope_geom.cosine_zenith
+                slope_geometry = slope_zenith_angle(z, solar_terrain, solar_azimuth)
+                zsl = slope_geometry.zenith_angle
+                czsl = slope_geometry.cosine_zenith
 
                 # Refraction correction
                 z = refraction_correction(z)
-                cz = cos(z)
-                intcz = floor(Int, 100.0 * cz + 1.0)
+                cosZ = cos(z)
+                intcz = floor(Int, 100.0 * cosZ + 1.0)
                 m_Zₐ = optical_air_mass(z)
-                ozone_depth = ozone_depth_lookup(ϕ, d, year, ozone_column)
+                X = ozone_depth_lookup(ϕ, d, year, ozone_column)
 
                 # Compute spectral irradiance
                 params = SpectralParams(
-                    nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cz, intcz, m_Zₐ,
-                    ozone_depth, cmH2O, elevation_factors, diffuse_model, A, z
+                    nmax, P, MR₀, τR, τO, τA, τW, Sλ, λ, ar², cosZ, intcz, m_Zₐ,
+                    X, w, elevation_factors, diffuse_model, A, z
                 )
                 compute_spectral_irradiance!(buffers, params, alt < ahoriz)
 
                 # Store results
-                ∫G, ∫Iᵣ, ∫I, ∫D = buffers.global_integral, buffers.rayleigh_integral, buffers.direct_integral, buffers.diffuse_integral
-                Gλ, Iᵣλ, Iλ, Dλ = buffers.global_spectrum, buffers.rayleigh_spectrum, buffers.direct_spectrum, buffers.diffuse_spectrum
-
-                out.global_spectra[step, :] .= Gλ
-                out.rayleigh_spectra[step, :] .= Iᵣλ
-                out.direct_spectra[step, :] .= Iλ
-                out.diffuse_spectra[step, :] .= Dλ
-                out.global_horizontal[step] = ∫G[nmax]
-                out.global_terrain[step] = terrain_irradiance(∫G[nmax], cz, czsl, z, solar_terrain)
-                out.rayleigh_horizontal[step] = ∫Iᵣ[nmax]
-                out.direct_horizontal[step] = ∫I[nmax]
-                out.diffuse_horizontal[step] = ∫D[nmax]
+                (; global_integral, rayleigh_integral, direct_integral, diffuse_integral,
+                   global_spectrum, rayleigh_spectrum, direct_spectrum, diffuse_spectrum) = buffers
+                out.global_spectra[step, :] .= global_spectrum
+                out.rayleigh_spectra[step, :] .= rayleigh_spectrum
+                out.direct_spectra[step, :] .= direct_spectrum
+                out.diffuse_spectra[step, :] .= diffuse_spectrum
+                out.global_horizontal[step] = global_integral[nmax]
+                out.global_terrain[step] = terrain_irradiance(global_integral[nmax], cosZ, czsl, z, solar_terrain)
+                out.rayleigh_horizontal[step] = rayleigh_integral[nmax]
+                out.direct_horizontal[step] = direct_integral[nmax]
+                out.diffuse_horizontal[step] = diffuse_integral[nmax]
             end
 
             out.zenith_angle[step] = uconvert(u"°", z)
@@ -523,8 +564,8 @@ function solar_radiation(solar_model::AbstractSolarRadiation;
     end
 
     nmax = solar_model.wavelength_count
-    ndays, ntimes = length(days_numeric), length(hours_numeric)
-    nsteps = ndays * ntimes
+    ndays = length(days_numeric)
+    nsteps = ndays * length(hours_numeric)
 
     out = allocate_output_arrays(nsteps, ndays, nmax)
     buffers = allocate_buffers(nmax, solar_model.diffuse_model)

@@ -21,13 +21,22 @@ at selected levels of a terrestrial, Rayleigh atmosphere. Meteorological Monogra
 end
 
 function diffuse_irradiance(model::DaveFurukawaScattering, wavelength_index, rayleigh_optical_depth, params, buffers)
-    n = wavelength_index
-    n > 11 && return 0.0u"W/m^2/nm"
-    ar², A, z, Sλ = params.sun_distance_factor, params.albedo, params.zenith_angle, params.solar_spectral_irradiance
+    wavelength_index > 11 && return 0.0u"W/m^2/nm"
     (; sky_irradiance, ground_reflected, single_scattering_albedo) = model
-    B = ustrip(u"°", z) / 5
+    (; solar_spectral_irradiance, sun_distance_factor, zenith_angle, albedo) = params
+
+    n = wavelength_index
+    Fd = sky_irradiance
+    Fd′_Q = ground_reflected
+    s̄ = single_scattering_albedo
+    Sλ = solar_spectral_irradiance
+    ar² = sun_distance_factor
+    Z = zenith_angle
+    A = albedo
+
+    B = uconvert(NoUnits, Z / 5u"°") # zenith angle in steps of 5°, the rows of the tables
     k = trunc(Int, B) + 1 + (B % 1 > 0.5)
-    Q = A / (1.0 - A * single_scattering_albedo[n])  # eq. 31 in Dave & Furukawa 1966
-    Dλ = (Sλ[n] / π) * (sky_irradiance[n, k] + ground_reflected[n, k] * Q) / 1000.0
-    return Dλ * ar²
+    Q = A / (1 - A * s̄[n]) # eq. 31 in Dave & Furukawa (1966)
+    Dλ = (Sλ[n] / π) * ar² * (Fd[n, k] + Fd′_Q[n, k] * Q) # eq. 16 in McCullough & Porter (1971)
+    return Dλ
 end

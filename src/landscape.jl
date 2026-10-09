@@ -68,7 +68,7 @@ Solar radiation model parameters.
 - `wavelengths::Vector{Quantity}`: Vector of wavelength bins (e.g. in `nm`).
 - `ozone_column::Matrix{Float64}`: Ozone column depth table indexed by latitude band and month (size 19×12).
 - `rayleigh_optical_depth`, `ozone_optical_depth`, `aerosol_optical_depth`, `water_optical_depth`: Vectors of optical depths per wavelength.
-- `solar_spectral_irradiance::Vector{Quantity}`: Solar spectral irradiance per wavelength bin.
+- `solar_spectral_irradiance::Vector{Quantity}`: Extraterrestrial solar spectral irradiance at each wavelength, e.g. in W m⁻² nm⁻¹.
 """
 @kwdef struct SolarProblem{SGM,DM<:AbstractDiffuseModel,PW,MRH,WC,WL,OC,ROD,OOD,AOD,WOD,SSI} <: AbstractSolarRadiation
     solar_geometry_model::SGM = McCulloughPorterSolarGeometry()
@@ -82,5 +82,5 @@ Solar radiation model parameters.
     ozone_optical_depth::OOD = DEFAULT_OZONE_OPTICAL_DEPTH # vector of optical depths per wavelength for ozone
     aerosol_optical_depth::AOD = DEFAULT_AEROSOL_OPTICAL_DEPTH # vector of optical depths per wavelength for aerosols
     water_optical_depth::WOD = DEFAULT_WATER_OPTICAL_DEPTH # vector of optical depths per wavelength for water vapor
-    solar_spectral_irradiance::SSI = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # solar spectral irradiance per wavelength bin (e.g. in `mW * cm^-2 * nm^-1`)
+    solar_spectral_irradiance::SSI = DEFAULT_SOLAR_SPECTRAL_IRRADIANCE # extraterrestrial solar spectral irradiance per wavelength
 end
