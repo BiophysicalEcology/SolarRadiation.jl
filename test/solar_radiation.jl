@@ -66,7 +66,6 @@ rayleigh_spectra = solar_radiation_out.rayleigh_spectra
 # Angstrom formula (formula 5.33 on P. 177 of "Climate Data and Resources" by Edward Linacre 1992
 day_of_year = repeat(days, inner=length(hours))
 
-# diffuse spectra test needs to be 1e-2 to pass with scattered_uv=true
 @testset "solar radiation comparisons" begin
     @test ustrip.(u"°", zenith_angle) ≈ zenith_nmr rtol=1e-8
     @test ustrip.(u"W/m^2", global_horizontal) ≈ global_nmr rtol=1e-4

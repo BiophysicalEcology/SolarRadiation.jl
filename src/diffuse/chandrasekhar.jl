@@ -1,3 +1,44 @@
+"""
+    ChandrasekharScattering()
+
+Diffuse irradiance from Chandrasekhar's iterative X and Y functions, all wavelengths.
+Much more expensive than [`DaveFurukawaScattering`](@ref). Corresponds to `IUV=1` in NicheMapR.
+
+## References
+
+McCullough, E. C. & Porter, W. P. (1971). Computing clear day solar radiation spectra
+for the terrestrial ecological environment. Ecology 52(6), 1008-1015, eq. 15.
+"""
+struct ChandrasekharScattering <: AbstractDiffuseModel end
+
+function diffuse_irradiance(::ChandrasekharScattering, wavelength_index, rayleigh_optical_depth, params, buffers)
+    rayleigh_optical_depth < MIN_RAYLEIGH_OPTICAL_DEPTH_CHANDRASEKHAR && return 0.0u"W/m^2/nm"
+    (; solar_spectral_irradiance, sun_distance_factor, cosine_zenith, cosine_zenith_index, air_mass, albedo) = params
+    (; polarization_parallel, polarization_perpendicular, spherical_albedo) =
+        scattered_radiation!(buffers.gamma, rayleigh_optical_depth)
+
+    n = wavelength_index
+    i = cosine_zenith_index
+    λτR = rayleigh_optical_depth
+    Sλ = solar_spectral_irradiance
+    ar² = sun_distance_factor
+    cosZ = cosine_zenith
+    m_Zₐ = air_mass
+    A = albedo
+    γₗ = polarization_parallel
+    γᵣ = polarization_perpendicular
+    s̄ = spherical_albedo
+
+    I₀λ = Sλ[n] * ar² * cosZ # eq. 1 in McCullough & Porter (1971)
+    Dλ = I₀λ * ((γₗ[i] + γᵣ[i]) / (2(1 - A * s̄)) - exp(-λτR * m_Zₐ)) # eq. 15
+    return Dλ
+end
+
+function allocate_buffers(nmax, ::ChandrasekharScattering)
+    gamma = allocate_scattered_radiation()
+    return (; allocate_spectral_buffers(nmax)..., gamma)
+end
+
 function allocate_scattered_radiation()
     (;
         chandrasekhar_X  = zeros(101),
@@ -16,12 +57,24 @@ function allocate_scattered_radiation()
     )
 end
 
-scattered_radiation(τ::Float64) = scattered_radiation!(allocate_scattered_radiation(), τ)
+"""
+    scattered_radiation(optical_thickness) -> (; polarization_parallel, polarization_perpendicular, spherical_albedo)
+    scattered_radiation!(buffers, optical_thickness)
 
-function scattered_radiation!(buffers, τ::Float64)
+Functions of eq. 15 in McCullough & Porter (1971) for a Rayleigh atmosphere of the given
+optical thickness (up to 2.0): `polarization_parallel` and `polarization_perpendicular` are γₗ and γᵣ,
+for light polarized parallel and perpendicular to the meridian plane, on the 101-point μ grid;
+`spherical_albedo` is s̄, the fraction of ground-reflected radiation scattered back down, and depends
+on optical thickness only.
+"""
+scattered_radiation(optical_thickness::Float64) =
+    scattered_radiation!(allocate_scattered_radiation(), optical_thickness)
+
+function scattered_radiation!(buffers, optical_thickness::Float64)
+    τ = optical_thickness
     # Large arrays (mutable, normal)
     (; μ, X1, Y1, X2, Y2, quad_weights, γᵣ, γₗ, chandrasekhar_XY_buffers) = buffers
-    AI = buffers.auxiliary_terms  # short alias for the math below
+    AI = buffers.auxiliary_terms
 
     # Set up μ array
     μ[1] = 0.0
@@ -131,7 +184,7 @@ function scattered_radiation!(buffers, τ::Float64)
         γᵣ[i] = AI[22] * (X2[i] + Y2[i]) - μ[i] * AI[23] * (X2[i] - Y2[i])
     end
 
-    return γᵣ, γₗ, s̄
+    return (; polarization_parallel=γₗ, polarization_perpendicular=γᵣ, spherical_albedo=s̄)
 end
 
 function init_chandrasekhar_XY_buffers()
@@ -633,70 +686,85 @@ function chandrasekhar_xy!(buffers, τ::Float64, characteristic_function_coeffs:
 
 end
 
-# Separated out from dchxy for easier optimisation
-# This algorithm is very expensive
-# TODO these argument names are nightmare fuel
-@noinline function _chandrasekhar_xy_converge!(fn_X, fn_Y, μ, Ψ, quad_weights_Xa, quad_weights_Xb, X_d_values, X_e_values, X, Y, X_approx, Y_approx)
+"""
+    _chandrasekhar_xy_converge!(previous_X, previous_Y, direction_cosines, characteristic_function,
+        simpson_weights, beam_transmission, sum_integrand, difference_integrand,
+        X_out, Y_out, X_update, Y_update)
+
+Iterate Chandrasekhar's X and Y functions from the fourth approximation in
+`previous_X`, `previous_Y` (updated in place) until Y agrees to 2e-4, or 15 iterations.
+Results go to `X_out`, `Y_out`; the remaining arrays are scratch.
+Returns `(converged, num_iterations)`.
+
+`beam_transmission` is exp(-τ/μ), `simpson_weights` the quadrature weights on the μ grid.
+"""
+@noinline function _chandrasekhar_xy_converge!(
+    previous_X, previous_Y, direction_cosines, characteristic_function,
+    simpson_weights, beam_transmission, sum_integrand, difference_integrand,
+    X_out, Y_out, X_update, Y_update,
+)
+    Xₚ = previous_X
+    Yₚ = previous_Y
+    μ = direction_cosines
+    Ψ = characteristic_function
+    w = simpson_weights
+    E = beam_transmission
+    I₊ = sum_integrand
+    I₋ = difference_integrand
+    X = X_out
+    Y = Y_out
+    X′ = X_update
+    Y′ = Y_update
+
     num_iterations = 1 # Fortran line 362
-    temp_c = 0.0 # Initialize before convergence loop
+    temp_c = 0.0
     converged = false
 
     while !converged
         @inbounds for i in 2:101
-            fnx_i = fn_X[i]
-            fny_i = fn_Y[i]
-            amu_i = μ[i]
+            Xᵢ = Xₚ[i]
+            Yᵢ = Yₚ[i]
+            μᵢ = μ[i]
 
-            #######################################################################################################
-            # Compute X_d_values and X_e_values for this i
-            # The most performance-intensive code of the package: loop inside loop inside while, called from another loop
-            # Possibly there is a faster algorithm?
-            # works marginally better when each line is separate
+            # Most expensive loop in the package; separate loops are marginally faster
             for j in 1:101
-                X_d_values[j] = Ψ[j] * (fnx_i * fn_X[j] - fny_i * fn_Y[j]) / (amu_i + μ[j])
+                I₊[j] = Ψ[j] * (Xᵢ * Xₚ[j] - Yᵢ * Yₚ[j]) / (μᵢ + μ[j])
             end
             for j in 1:101
-                X_e_values[j] = Ψ[j] * (fny_i * fn_X[j] - fnx_i * fn_Y[j]) / (amu_i - μ[j])
+                I₋[j] = Ψ[j] * (Yᵢ * Xₚ[j] - Xᵢ * Yₚ[j]) / (μᵢ - μ[j])
             end
-            #######################################################################################################
 
-            # Everett's formula / interpolation for X_e_values[i]
-            X_e_values[i] = if i <= 3
-                0.5 * (X_e_values[i+1] + X_e_values[i-1])
+            # Everett interpolation across the removable singularity at j = i
+            I₋[i] = if i <= 3
+                0.5 * (I₋[i+1] + I₋[i-1])
             elseif i <= 5
-                0.0625 * (9.0*(X_e_values[i+1] + X_e_values[i-1]) - X_e_values[i+3] - X_e_values[i-3])
+                0.0625 * (9.0*(I₋[i+1] + I₋[i-1]) - I₋[i+3] - I₋[i-3])
             elseif i <= 96
-                (3.0*(X_e_values[i+5] + X_e_values[i-5]) + 150.0*(X_e_values[i+1] + X_e_values[i-1]) - 25.0*(X_e_values[i+3] + X_e_values[i-3])) / 256.0
+                (3.0*(I₋[i+5] + I₋[i-5]) + 150.0*(I₋[i+1] + I₋[i-1]) - 25.0*(I₋[i+3] + I₋[i-3])) / 256.0
             else
-                5.0*X_e_values[i-1] + 10.0*X_e_values[i-3] + X_e_values[i-5] - 10.0*X_e_values[i-2] - 5.0*X_e_values[i-4]
+                5.0*I₋[i-1] + 10.0*I₋[i-3] + I₋[i-5] - 10.0*I₋[i-2] - 5.0*I₋[i-4]
             end
 
-            #########################################################
-            # Second most expensive code in the package
-            # is a huge performance gain
-            sxd = 0.0
-            sxe = 0.0
+            S₊ = 0.0
+            S₋ = 0.0
             for ic in 1:101
-                sxd += quad_weights_Xa[ic] * X_d_values[ic]
-                sxe += quad_weights_Xa[ic] * X_e_values[ic]
+                S₊ += w[ic] * I₊[ic]
+                S₋ += w[ic] * I₋[ic]
             end
-            #########################################################
 
-            X_approx[i] = 1.0 + amu_i * sxd
-            Y_approx[i] = quad_weights_Xb[i] + amu_i * sxe
+            X′[i] = 1.0 + μᵢ * S₊
+            Y′[i] = E[i] + μᵢ * S₋
         end
 
-        # Correction to X and Y
         @inbounds for i in 1:101
-            temp_d = temp_c * μ[i] * (1.0 - quad_weights_Xb[i])
-            X[i] = X_approx[i] + temp_d
-            Y[i] = Y_approx[i] + temp_d
+            temp_d = temp_c * μ[i] * (1.0 - E[i])
+            X[i] = X′[i] + temp_d
+            Y[i] = Y′[i] + temp_d
         end
 
-        # Check convergence (same as before)
         if num_iterations > 1
             @inbounds for i in 2:101
-                rel_error = abs((Y[i] - fn_Y[i]) / Y[i])
+                rel_error = abs((Y[i] - Yₚ[i]) / Y[i])
                 # TODO this seems wrong? shouldnt it only break if errors are <= 2.0e-4 for all i ?
                 if rel_error <= 2.0e-4
                     converged = true
@@ -705,15 +773,14 @@ end
             end
         end
 
-        # Prepare for next iteration
         @inbounds for i in 1:101
-            fn_X[i] = X[i]
-            fn_Y[i] = Y[i]
+            Xₚ[i] = X[i]
+            Yₚ[i] = Y[i]
         end
 
         num_iterations += 1
         num_iterations > 15 && break
-    end 
+    end
 
     return converged, num_iterations
 end

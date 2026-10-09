@@ -5,3 +5,4 @@ using Aqua, SolarRadiation, DataFrames, CSV, Test, SafeTestsets, Unitful
 end
 
 @safetestset "Test against NicheMapR outputs" begin include("solar_radiation.jl") end
+@safetestset "Diffuse models" begin include("diffuse.jl") end
