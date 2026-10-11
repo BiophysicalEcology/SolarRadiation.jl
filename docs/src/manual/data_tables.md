@@ -25,12 +25,11 @@ using CairoMakie, SolarRadiation, Unitful
 
 The wavelengths are closer together where the spectrum changes quickly, in the ultraviolet and visible, and further apart in
 the infrared. The spectrum is the irradiance of a plane perpendicular to the rays at one astronomical unit from the sun. It is
-stored as ten times the tabulated values, with a nominal unit of W m⁻² nm⁻¹, and the calculation divides by 1000, so that the irradiances
-it gives are in W m⁻² nm⁻¹.
+tabulated in mW cm⁻² μm⁻¹ (McCullough and Porter 1971) and converted to W m⁻² nm⁻¹.
 
 ```@example tables
 wavelength = ustrip.(u"nm", SolarRadiation.DEFAULT_WAVELENGTHS)
-spectrum = ustrip.(u"W/m^2/nm", SolarRadiation.DEFAULT_SOLAR_SPECTRAL_IRRADIANCE) ./ 1000
+spectrum = ustrip.(u"W/m^2/nm", SolarRadiation.DEFAULT_SOLAR_SPECTRAL_IRRADIANCE)
 
 fig = Figure(size = (700, 380))
 ax1 = Axis(fig[1, 1]; xlabel = "Wavelength (nm)", ylabel = "Solar spectral irradiance (W m⁻² nm⁻¹)")

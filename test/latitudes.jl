@@ -17,12 +17,12 @@ june_solstice, december_solstice, march_equinox, september_equinox = 172.0, 355.
 @testset "latitudes" begin
     @testset "sunrise hour angle" begin
         polar_night = SolarRadiation.sunrise_hour_angle(deg2rad(-23.44), 80.0u"°")
-        @test polar_night.H₊ == 0.0
-        @test polar_night.H₋ == 0.0
+        @test polar_night.hour_angle_sunset == 0.0
+        @test polar_night.hour_angle_sunrise == 0.0
         polar_day = SolarRadiation.sunrise_hour_angle(deg2rad(23.44), 80.0u"°")
-        @test polar_day.H₊ == π
-        @test polar_day.H₋ == 12.0
-        @test SolarRadiation.sunrise_hour_angle(0.0, 45.0u"°").H₋ ≈ 6.0
+        @test polar_day.hour_angle_sunset ≈ π
+        @test polar_day.hour_angle_sunrise == 12.0
+        @test SolarRadiation.sunrise_hour_angle(0.0, 45.0u"°").hour_angle_sunrise ≈ 6.0
         @test !SolarRadiation.is_sun_up(0.0, 0.0)
     end
 

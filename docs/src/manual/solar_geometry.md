@@ -119,7 +119,7 @@ lats = -90:0.5:90
 fig, ax = figure_axis("Latitude (°)", "Day length (h)"; yticks = 0:4:24)
 for (day, label) in ((172, "June solstice"), (80, "March equinox"), (355, "December solstice"))
     δ = solar_geometry(model, 0.0u"°"; day_of_year = day, hour_angle = 0.0u"rad").solar_declination
-    daylength = [2 * SolarRadiation.sunrise_hour_angle(δ, lat * u"°").H₋ for lat in lats]
+    daylength = [2 * SolarRadiation.sunrise_hour_angle(δ, lat * u"°").hour_angle_sunrise for lat in lats]
     lines!(ax, lats, daylength; linewidth = 2, label)
 end
 axislegend(ax; position = :cb)

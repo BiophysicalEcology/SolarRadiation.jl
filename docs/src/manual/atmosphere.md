@@ -138,7 +138,7 @@ steps = (
 )
 
 geometry = solar_geometry(model.solar_geometry_model, -37.8u"°"; day_of_year = 15, hour_angle = 0.0u"rad")
-top_of_atmosphere = model.solar_spectral_irradiance ./ 1000 .* geometry.sun_distance_factor .* cos(geometry.zenith_angle)
+top_of_atmosphere = model.solar_spectral_irradiance .* geometry.sun_distance_factor .* cos(geometry.zenith_angle)
 
 noon_run(problem, terrain) = solar_radiation(problem; solar_terrain = terrain, days = [15], hours = [12.0])
 spectrum(x) = x[1, :]

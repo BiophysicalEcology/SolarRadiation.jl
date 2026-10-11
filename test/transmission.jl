@@ -5,7 +5,7 @@ using Unitful
 using Test
 
 @testset "direct irradiance" begin
-    Sλ = 1500.0u"W/m^2/nm" # tabulated spectrum is stored ×1000
+    Sλ = 1.5u"W/m^2/nm"
     # zero optical depth transmits the full beam
     I = direct_irradiance(Sλ, 1.0, 0.5, 0.0, 0.0, 1.0)
     @test I.direct ≈ 0.75u"W/m^2/nm"

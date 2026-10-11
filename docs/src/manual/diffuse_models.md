@@ -118,8 +118,8 @@ keys(scattering)
 μ = range(0, 1, length = 101)
 
 fig, ax = figure_axis("Cosine of the zenith angle", "γ")
-lines!(ax, μ, scattering.polarization_l; linewidth = 2, label = "γₗ")
-lines!(ax, μ, scattering.polarization_r; linewidth = 2, label = "γᵣ")
+lines!(ax, μ, scattering.polarization_parallel; linewidth = 2, label = "γₗ")
+lines!(ax, μ, scattering.polarization_perpendicular; linewidth = 2, label = "γᵣ")
 axislegend(ax; position = :lt)
 fig
 ```
@@ -194,7 +194,7 @@ end
 
 function SolarRadiation.diffuse_irradiance(model::FractionOfExtraterrestrial, wavelength_index, rayleigh_optical_depth, params, buffers)
     (; solar_spectral_irradiance, sun_distance_factor, cosine_zenith) = params
-    return model.fraction * solar_spectral_irradiance[wavelength_index] * sun_distance_factor * cosine_zenith / 1000
+    return model.fraction * solar_spectral_irradiance[wavelength_index] * sun_distance_factor * cosine_zenith
 end
 
 model = SolarProblem(; diffuse_model = FractionOfExtraterrestrial(0.01))
