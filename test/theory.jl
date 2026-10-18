@@ -132,13 +132,13 @@ using SolarRadiation: hour_angle, solar_geometry, solar_azimuth_angle,
         h, _ = hour_angle(12.0, 0.0)
         geom = solar_geometry(model, 45.0u"°"; day_of_year=80, hour_angle=h)
         sunrise = sunrise_hour_angle(geom.solar_declination, 45.0u"°")
-        daylight_hours = 2 * sunrise.H₋
+        daylight_hours = 2 * sunrise.hour_angle_sunrise
         @test 11.5 < daylight_hours < 12.5
 
         # At equator on equinox, should be exactly 12h
         geom_eq = solar_geometry(model, 0.0u"°"; day_of_year=80, hour_angle=h)
         sunrise_eq = sunrise_hour_angle(geom_eq.solar_declination, 0.0u"°")
-        @test sunrise_eq.H₋ ≈ 6.0 atol=0.5  # 6 hours from noon = 12h day
+        @test sunrise_eq.hour_angle_sunrise ≈ 6.0 atol=0.5  # 6 hours from noon = 12h day
     end
 end
 

@@ -15,9 +15,9 @@ Compute the solar hour angle `h` in radians.
 McCullough & Porter 1971, Eq. 6
 """
 function hour_angle(t::Real, longitude_correction::Real=0)
-    tsn = 12.0 + longitude_correction      # solar noon time
-    h = (π / 12) * (t - tsn) * u"rad"      # convert hours to radians
-    return h, tsn
+    tsn = 12.0 + longitude_correction # time of solar noon
+    h = 15u"°" * (t - tsn) # eq. 6 in McCullough & Porter (1971), 15° per hour
+    return uconvert(u"rad", h), tsn
 end
 
 abstract type AbstractSolarGeometryModel end
@@ -80,23 +80,26 @@ function solar_geometry(sm::McCulloughPorterSolarGeometry, latitude::Quantity;
     days_in_year::Real=365,
 )
     (; reference_day, orbital_eccentricity, declination_amplitude) = sm
-    # Compute orbital angular frequency dynamically based on year length
-    ω = orbital_angular_frequency(days_in_year)
-    # Use short aliases for equations (standard notation)
-    d0, ϵ, se = reference_day, orbital_eccentricity, declination_amplitude
-    d, h = day_of_year, hour_angle
 
-    ζ = (ω * (d - d0)) + 2.0ϵ * (sin(ω * d) - sin(ω * d0))          # eq.5 McCullough & Porter (1971)
-    δ = asin(se * sin(ζ))                                           # eq.4 McCullough & Porter (1971)
-    cosZ = cos(latitude) * cos(δ) * cos(h) + sin(latitude) * sin(δ) # Eq.3 McCullough & Porter (1971)
-    z = acos(cosZ)
-    ar² = 1.0 + (2.0ϵ) * cos(ω * d)                                 # eq.2 McCullough & Porter (1971)
+    d₀ = reference_day
+    ϵ = orbital_eccentricity
+    se = declination_amplitude
+    ϕ = latitude
+    d = day_of_year
+    h = hour_angle
+    ω = orbital_angular_frequency(days_in_year)
+
+    ζ = ω * (d - d₀) + 2ϵ * (sin(ω * d) - sin(ω * d₀)) # eq. 5 in McCullough & Porter (1971)
+    δ = asin(se * sin(ζ)) # eq. 4
+    cosZ = cos(ϕ) * cos(δ) * cos(h) + sin(ϕ) * sin(δ) # eq. 3
+    Z = acos(cosZ)
+    ar² = 1 + 2ϵ * cos(ω * d) # eq. 2
 
     return (;
         solar_longitude = ζ,
         solar_declination = δ,
-        zenith_angle = z,
-        sun_distance_factor = ar²
+        zenith_angle = Z,
+        sun_distance_factor = ar²,
     )
 end
 
@@ -114,7 +117,9 @@ Compute solar azimuth angle with quadrant correction.
 Solar azimuth angle in degrees (0-360°, measured clockwise from north)
 """
 function solar_azimuth_angle(hour_angle, latitude, declination)
-    h, ϕ, δ = hour_angle, latitude, declination
+    h = hour_angle
+    ϕ = latitude
+    δ = declination
 
     tan_azimuth = sin(h) / (cos(ϕ) * tan(δ) - sin(ϕ) * cos(h))
     azimuth = atan(tan_azimuth)
