@@ -191,3 +191,19 @@ end
     # Default
     @test orbital_angular_frequency() ≈ 2π / 365
 end
+
+@testset "reused output arrays match a fresh solve at a different site" begin
+    southern_terrain = SolarTerrain(;
+        horizon_angles, elevation, slope, aspect, albedo, atmospheric_pressure,
+        latitude = -30.0u"°", longitude,
+    )
+    nmax = solar_model.wavelength_count
+    out = allocate_output_arrays(length(days) * length(hours), length(days), nmax)
+    buffers = allocate_buffers(nmax, solar_model.diffuse_model)
+    solar_radiation!(out, buffers, solar_model; solar_terrain, days, hours)
+    solar_radiation!(out, buffers, solar_model; solar_terrain = southern_terrain, days, hours)
+    fresh = solar_radiation(solar_model; solar_terrain = southern_terrain, days, hours)
+    for k in keys(fresh)
+        @test getproperty(out, k) == getproperty(fresh, k)
+    end
+end

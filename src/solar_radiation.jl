@@ -240,29 +240,30 @@ end
 """
     allocate_output_arrays(nsteps, ndays, nmax)
 
-Allocate all output arrays for solar radiation computation.
+Allocate all output arrays for solar radiation computation. They are left
+uninitialised: `solar_radiation!` writes every entry.
 """
 function allocate_output_arrays(nsteps, ndays, nmax)
+    Angle = typeof(0.0u"°")
+    Irradiance = typeof(0.0u"W/m^2")
+    SpectralIrradiance = typeof(0.0u"W/nm/m^2")
     return (;
-        zenith_angle = fill(90.0u"°", nsteps),
-        zenith_slope_angle = fill(90.0u"°", nsteps),
-        # 90° is the sun-below-horizon sentinel; using a plain Vector{Quantity{°}}
-        # avoids the Union{Missing,...} boxing that would heap-allocate every
-        # azimuth write inside the per-step loop.
-        azimuth_angle = fill(90.0u"°", nsteps),
-        hour_angle_sunrise = fill(0.0, ndays),
-        hour_solar_noon = fill(0.0, ndays),
+        zenith_angle = Vector{Angle}(undef, nsteps),
+        zenith_slope_angle = Vector{Angle}(undef, nsteps),
+        azimuth_angle = Vector{Angle}(undef, nsteps),
+        hour_angle_sunrise = Vector{Float64}(undef, ndays),
+        hour_solar_noon = Vector{Float64}(undef, ndays),
         day_of_year = Vector{Int}(undef, nsteps),
         hour = Vector{Float64}(undef, nsteps),
-        rayleigh_horizontal = fill(0.0u"W/m^2", nsteps),
-        direct_horizontal = fill(0.0u"W/m^2", nsteps),
-        diffuse_horizontal = fill(0.0u"W/m^2", nsteps),
-        global_horizontal = fill(0.0u"W/m^2", nsteps),
-        global_terrain = fill(0.0u"W/m^2", nsteps),
-        rayleigh_spectra = fill(0.0u"W/nm/m^2", nsteps, nmax),
-        direct_spectra = fill(0.0u"W/nm/m^2", nsteps, nmax),
-        diffuse_spectra = fill(0.0u"W/nm/m^2", nsteps, nmax),
-        global_spectra = fill(0.0u"W/nm/m^2", nsteps, nmax),
+        rayleigh_horizontal = Vector{Irradiance}(undef, nsteps),
+        direct_horizontal = Vector{Irradiance}(undef, nsteps),
+        diffuse_horizontal = Vector{Irradiance}(undef, nsteps),
+        global_horizontal = Vector{Irradiance}(undef, nsteps),
+        global_terrain = Vector{Irradiance}(undef, nsteps),
+        rayleigh_spectra = Matrix{SpectralIrradiance}(undef, nsteps, nmax),
+        direct_spectra = Matrix{SpectralIrradiance}(undef, nsteps, nmax),
+        diffuse_spectra = Matrix{SpectralIrradiance}(undef, nsteps, nmax),
+        global_spectra = Matrix{SpectralIrradiance}(undef, nsteps, nmax),
     )
 end
 
@@ -400,8 +401,6 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             if skylight !== nothing
                 buffers.∫D[nmax] = skylight
                 buffers.∫G[nmax] = skylight
-                out.global_horizontal[step] = skylight
-                out.diffuse_horizontal[step] = skylight
             end
 
             # Sunrise/sunset calculation
@@ -409,7 +408,7 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
             H₋ = sunrise.H₋
             sun_up = is_sun_up(t - tsn, H₋)
 
-            # 90° = sun-below-horizon sentinel (matches the Vector pre-fill);
+            # 90° = sun-below-horizon sentinel;
             # avoids `Union{Missing, Quantity{°}}` typing of `solar_azimuth`
             # which would force boxing through the slope_zenith_angle call below.
             solar_azimuth = 90.0u"°"
@@ -448,6 +447,18 @@ function solar_radiation!(out, buffers, solar_model::AbstractSolarRadiation;
                 out.rayleigh_horizontal[step] = ∫Iᵣ[nmax]
                 out.direct_horizontal[step] = ∫I[nmax]
                 out.diffuse_horizontal[step] = ∫D[nmax]
+            else
+                # Sun below the horizon: only twilight skylight, which is diffuse
+                twilight = isnothing(skylight) ? 0.0u"W/m^2" : skylight
+                out.global_spectra[step, :] .= 0.0u"W/nm/m^2"
+                out.rayleigh_spectra[step, :] .= 0.0u"W/nm/m^2"
+                out.direct_spectra[step, :] .= 0.0u"W/nm/m^2"
+                out.diffuse_spectra[step, :] .= 0.0u"W/nm/m^2"
+                out.global_horizontal[step] = twilight
+                out.global_terrain[step] = 0.0u"W/m^2"
+                out.rayleigh_horizontal[step] = 0.0u"W/m^2"
+                out.direct_horizontal[step] = 0.0u"W/m^2"
+                out.diffuse_horizontal[step] = twilight
             end
 
             out.zenith_angle[step] = uconvert(u"°", z)
